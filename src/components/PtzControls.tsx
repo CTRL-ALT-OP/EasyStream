@@ -243,7 +243,7 @@ export function PtzControls({ crop, presets, activePresetId, onCropChange, onPre
   return (
     <aside className="ptz-panel glass-card">
       <div className="panel-heading">
-        <h2>PTZ Control</h2>
+        <h2>PTZ</h2>
         <span className="status-pill online">Online</span>
       </div>
 

@@ -100,7 +100,7 @@ export function CameraPanel({
     <section className="camera-section">
       <div className="camera-view glass-card">
         <div className="camera-header">
-          <h1>{mainFeed === 'wide' ? 'Wide-Angle Viewfinder' : 'PTZ Program Camera'}</h1>
+          <h1>{mainFeed === 'wide' ? 'Preview' : 'PTZ'}</h1>
           <div className="camera-hints">
             <span>
               <MousePointer2 size={13} />

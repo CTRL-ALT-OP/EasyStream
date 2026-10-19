@@ -75,7 +75,7 @@ export function StreamingControls({
   return (
     <section className="streaming-panel glass-card">
       <div className="panel-heading">
-        <h2>Streaming Layouts</h2>
+        <h2>Output</h2>
         <span className={`status-pill ${isStreaming ? 'live' : ''}`}>{isStreaming ? 'Live' : 'Standby'}</span>
       </div>
 
@@ -90,7 +90,6 @@ export function StreamingControls({
               <div className="layout-preview ratio-slot">
                 <div className="ratio-16x9">
                   <LayoutComposite layout={layout} crop={crop} media={media} />
-                  <span className="downsample-badge">downsampled</span>
                 </div>
               </div>
               <span className="layout-label">{layout.label}</span>
@@ -130,10 +129,7 @@ export function StreamingControls({
         <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
           <div className="settings-modal" onClick={(event) => event.stopPropagation()}>
             <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Mock Destination</span>
-                <h2>Stream Settings</h2>
-              </div>
+              <h2>Stream Settings</h2>
               <button className="icon-button" onClick={() => setSettingsOpen(false)}>
                 Close
               </button>

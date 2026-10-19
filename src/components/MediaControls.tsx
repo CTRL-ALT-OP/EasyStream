@@ -45,7 +45,7 @@ export function MediaControls({ media, onMediaChange, onPlaybackProgress }: Medi
   return (
     <section className="media-panel glass-card">
       <div className="panel-heading">
-        <h2>{media.mode === 'video' ? 'Mock Video Playback' : 'Mock Slideshow'}</h2>
+        <h2>Media</h2>
         <div className="media-picker">
           <button className="action-button compact">
             <FolderOpen size={17} />

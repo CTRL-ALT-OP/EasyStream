@@ -8,7 +8,7 @@ const createWindow = (): void => {
     minWidth: 1180,
     minHeight: 760,
     title: 'EasyStream Demo',
-    backgroundColor: '#07111f',
+    backgroundColor: '#141414',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
