@@ -14,7 +14,13 @@ export type PtzPreset = {
   crop: CropRect;
 };
 
-export type LayoutPresetId = 'ptz-full' | 'media-full' | 'media-portrait-right' | 'media-portrait-tight';
+export type LayoutPresetId =
+  | 'ptz-full'
+  | 'media-full'
+  | 'media-portrait-right'
+  | 'media-portrait-tight'
+  | 'media-camera-below'
+  | 'media-camera-above';
 
 export type LayoutPreset = {
   id: LayoutPresetId;

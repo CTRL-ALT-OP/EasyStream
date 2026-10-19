@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, Aperture, Clapperboard, RadioTower } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { CameraPanel } from './components/CameraPanel';
 import { MediaControls } from './components/MediaControls';
 import { StreamingControls } from './components/StreamingControls';
-import { defaultCrop, layoutPresets, ptzPresets } from './demo/presets';
+import { layoutPresets, ptzPresets } from './demo/presets';
 import type { CropRect, FeedKind, LayoutPresetId, MediaState, PtzPreset } from './types';
 
 const initialMediaState: MediaState = {
@@ -14,38 +13,23 @@ const initialMediaState: MediaState = {
 };
 
 function App() {
-  const [crop, setCrop] = useState<CropRect>(defaultCrop);
+  const [crop, setCrop] = useState<CropRect>(ptzPresets[0].crop);
   const [mainFeed, setMainFeed] = useState<FeedKind>('wide');
-  const [activePresetId, setActivePresetId] = useState<string | null>('stage-wide');
+  const [activePresetId, setActivePresetId] = useState<string | null>(ptzPresets[0].id);
   const [activeLayout, setActiveLayout] = useState<LayoutPresetId>('media-portrait-right');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [media, setMedia] = useState<MediaState>(initialMediaState);
 
-  useEffect(() => {
-    if (media.mode !== 'video' || !media.isPlaying) {
-      return;
-    }
+  const handlePlaybackProgress = useCallback((progress: number) => {
+    setMedia((current) => {
+      if (current.mode !== 'video' || !current.isPlaying) {
+        return current;
+      }
 
-    const interval = window.setInterval(() => {
-      setMedia((current) => ({
-        ...current,
-        progress: current.mode === 'video' ? (current.progress + 0.65) % 100 : current.progress
-      }));
-    }, 600);
-
-    return () => window.clearInterval(interval);
-  }, [media.mode, media.isPlaying]);
-
-  const statusItems = useMemo(
-    () => [
-      { icon: Aperture, label: 'PTZ', value: `${Math.round(10000 / crop.width)}% zoom` },
-      { icon: Clapperboard, label: 'Media', value: media.mode === 'video' ? 'Video loaded' : `Slide ${media.slideIndex + 1}` },
-      { icon: RadioTower, label: 'Stream', value: isStreaming ? 'Live output' : 'Ready' },
-      { icon: Activity, label: 'Record', value: isRecording ? 'Recording' : 'Armed' }
-    ],
-    [crop.width, isRecording, isStreaming, media.mode, media.slideIndex]
-  );
+      return { ...current, progress };
+    });
+  }, []);
 
   const handleCropChange = (nextCrop: CropRect, presetId: string | null = null) => {
     setCrop(nextCrop);
@@ -59,25 +43,6 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand">
-          <div className="brand-mark">ES</div>
-          <div>
-            <span className="eyebrow">Integrated Production Control</span>
-            <h1>EasyStream</h1>
-          </div>
-        </div>
-        <div className="header-status">
-          {statusItems.map((item) => (
-            <div className="status-chip" key={item.label}>
-              <item.icon size={16} />
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </div>
-      </header>
-
       <main>
         <CameraPanel
           crop={crop}
@@ -101,7 +66,7 @@ function App() {
             onStreamingChange={setIsStreaming}
             onRecordingChange={setIsRecording}
           />
-          <MediaControls media={media} onMediaChange={setMedia} />
+          <MediaControls media={media} onMediaChange={setMedia} onPlaybackProgress={handlePlaybackProgress} />
         </div>
       </main>
     </div>

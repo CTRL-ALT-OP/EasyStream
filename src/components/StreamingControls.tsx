@@ -24,10 +24,35 @@ function LayoutComposite({ layout, crop, media }: { layout: LayoutPreset; crop: 
     return <MediaFrame media={media} downsampled />;
   }
 
+  if (layout.id === 'media-camera-below' || layout.id === 'media-camera-above') {
+    const cameraAbove = layout.id === 'media-camera-above';
+    const mediaFrame = (
+      <div className="composite-media">
+        <MediaFrame media={media} downsampled />
+      </div>
+    );
+    const cameraFrame = (
+      <div className="stack-camera">
+        <PtzFrame crop={crop} downsampled />
+      </div>
+    );
+
+    return (
+      <div className={`composite-layout stacked ${cameraAbove ? 'camera-first' : ''}`}>
+        {cameraAbove ? cameraFrame : mediaFrame}
+        {cameraAbove ? mediaFrame : cameraFrame}
+      </div>
+    );
+  }
+
   return (
-    <div className={`composite-layout ${layout.id}`}>
-      <MediaFrame media={media} downsampled />
-      <PtzFrame crop={crop} portrait downsampled />
+    <div className="composite-layout">
+      <div className="composite-media">
+        <MediaFrame media={media} downsampled />
+      </div>
+      <div className="portrait-slot">
+        <PtzFrame crop={crop} portrait tight={layout.id === 'media-portrait-tight'} downsampled />
+      </div>
     </div>
   );
 }
@@ -50,10 +75,7 @@ export function StreamingControls({
   return (
     <section className="streaming-panel glass-card">
       <div className="panel-heading">
-        <div>
-          <span className="eyebrow">Program</span>
-          <h2>Streaming Layouts</h2>
-        </div>
+        <h2>Streaming Layouts</h2>
         <span className={`status-pill ${isStreaming ? 'live' : ''}`}>{isStreaming ? 'Live' : 'Standby'}</span>
       </div>
 
@@ -65,12 +87,13 @@ export function StreamingControls({
               key={layout.id}
               onClick={() => onLayoutChange(layout.id)}
             >
-              <div className="layout-preview">
-                <LayoutComposite layout={layout} crop={crop} media={media} />
-                <span className="downsample-badge">downsampled</span>
+              <div className="layout-preview ratio-slot">
+                <div className="ratio-16x9">
+                  <LayoutComposite layout={layout} crop={crop} media={media} />
+                  <span className="downsample-badge">downsampled</span>
+                </div>
               </div>
-              <span>{layout.label}</span>
-              <small>{layout.description}</small>
+              <span className="layout-label">{layout.label}</span>
             </button>
           ))}
         </div>
@@ -81,7 +104,11 @@ export function StreamingControls({
               <span>Selected Output</span>
               <strong>{activeLayoutMeta.label}</strong>
             </div>
-            <LayoutComposite layout={activeLayoutMeta} crop={crop} media={media} />
+            <div className="ratio-slot">
+              <div className="ratio-16x9">
+                <LayoutComposite layout={activeLayoutMeta} crop={crop} media={media} />
+              </div>
+            </div>
           </div>
 
           <button className={`action-button primary ${isStreaming ? 'danger' : ''}`} onClick={() => onStreamingChange(!isStreaming)}>

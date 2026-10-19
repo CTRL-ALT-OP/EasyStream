@@ -1,4 +1,6 @@
-import { Focus, Home, Minus, Plus, RotateCcw, RotateCw, ZoomIn } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Focus, Home, Minus, Plus, ZoomIn } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { panCrop, zoomCrop } from '../lib/crop';
 import type { CropRect, PtzPreset } from '../types';
 
 type PtzControlsProps = {
@@ -9,58 +11,257 @@ type PtzControlsProps = {
   onPresetRecall: (preset: PtzPreset) => void;
 };
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+type Direction = 'up' | 'down' | 'left' | 'right';
 
-const normalizeCrop = (crop: CropRect): CropRect => ({
-  x: clamp(crop.x, 0, 100 - crop.width),
-  y: clamp(crop.y, 0, 100 - crop.height),
-  width: clamp(crop.width, 12, 90),
-  height: clamp(crop.height, 12, 70)
-});
+const DIRECTIONS: Direction[] = ['up', 'down', 'left', 'right'];
+
+const VECTORS: Record<Direction, [number, number]> = {
+  up: [0, -1],
+  down: [0, 1],
+  left: [-1, 0],
+  right: [1, 0]
+};
+
+const KEY_DIRECTIONS: Record<string, Direction> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right'
+};
+
+const TAP_FRACTION = 0.16;
+const HOLD_SPEED = 0.62;
+const TAP_WINDOW_MS = 170;
 
 export function PtzControls({ crop, presets, activePresetId, onCropChange, onPresetRecall }: PtzControlsProps) {
-  const move = (dx: number, dy: number) => {
-    onCropChange(normalizeCrop({ ...crop, x: crop.x + dx, y: crop.y + dy }));
+  const cropRef = useRef(crop);
+  const onCropChangeRef = useRef(onCropChange);
+  const pointerCounts = useRef<Record<Direction, number>>({ up: 0, down: 0, left: 0, right: 0 });
+  const pointerDirections = useRef(new Map<number, Direction>());
+  const keys = useRef(new Set<Direction>());
+  const frame = useRef<number | null>(null);
+  const moved = useRef(0);
+  const gestureStartedAt = useRef(0);
+  const [held, setHeld] = useState<Direction[]>([]);
+  const beginRef = useRef<() => void>(() => undefined);
+  const finishRef = useRef<(direction: Direction) => void>(() => undefined);
+
+  cropRef.current = crop;
+  onCropChangeRef.current = onCropChange;
+
+  const directionActive = (direction: Direction) => pointerCounts.current[direction] > 0 || keys.current.has(direction);
+
+  const publishHeld = () => {
+    const next = DIRECTIONS.filter(directionActive);
+    setHeld((current) => (current.join() === next.join() ? current : next));
+    document.body.classList.toggle('ptz-nudging', next.length > 0);
   };
 
+  const panBy = (dx: number, dy: number) => {
+    const next = panCrop(cropRef.current, dx, dy);
+    cropRef.current = next;
+    onCropChangeRef.current(next);
+  };
+
+  const stopLoop = () => {
+    if (frame.current !== null) {
+      window.clearInterval(frame.current);
+      frame.current = null;
+    }
+  };
+
+  const stepHeld = (dt: number) => {
+    let x = 0;
+    let y = 0;
+    for (const direction of DIRECTIONS) {
+      if (!directionActive(direction)) {
+        continue;
+      }
+
+      const [dx, dy] = VECTORS[direction];
+      x += dx;
+      y += dy;
+    }
+
+    if (x === 0 && y === 0) {
+      return;
+    }
+
+    const length = Math.hypot(x, y);
+    const current = cropRef.current;
+    const distance = HOLD_SPEED * dt;
+    panBy((x / length) * current.width * distance, (y / length) * current.height * distance);
+    moved.current += distance;
+  };
+
+  const ensureLoop = () => {
+    if (frame.current !== null) {
+      return;
+    }
+
+    let last = performance.now();
+    frame.current = window.setInterval(() => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      stepHeld(dt);
+    }, 32);
+  };
+
+  const finishGestureIfIdle = (direction: Direction) => {
+    if (DIRECTIONS.some(directionActive)) {
+      publishHeld();
+      return;
+    }
+
+    stopLoop();
+    const elapsed = performance.now() - gestureStartedAt.current;
+    if (elapsed < TAP_WINDOW_MS && moved.current < TAP_FRACTION) {
+      const [dx, dy] = VECTORS[direction];
+      const remaining = TAP_FRACTION - moved.current;
+      const current = cropRef.current;
+      panBy(dx * current.width * remaining, dy * current.height * remaining);
+    }
+
+    moved.current = 0;
+    publishHeld();
+  };
+
+  const beginGestureIfNeeded = () => {
+    if (!DIRECTIONS.some(directionActive)) {
+      return;
+    }
+
+    if (frame.current === null) {
+      moved.current = 0;
+      gestureStartedAt.current = performance.now();
+      ensureLoop();
+    }
+
+    publishHeld();
+  };
+
+  const pressPointer = (direction: Direction, pointerId: number) => {
+    if (pointerDirections.current.has(pointerId)) {
+      return;
+    }
+
+    pointerDirections.current.set(pointerId, direction);
+    pointerCounts.current[direction] += 1;
+    beginGestureIfNeeded();
+  };
+
+  const releasePointer = (pointerId: number) => {
+    const direction = pointerDirections.current.get(pointerId);
+    if (!direction) {
+      return;
+    }
+
+    pointerDirections.current.delete(pointerId);
+    pointerCounts.current[direction] = Math.max(0, pointerCounts.current[direction] - 1);
+    finishGestureIfIdle(direction);
+  };
+
+  beginRef.current = beginGestureIfNeeded;
+  finishRef.current = finishGestureIfIdle;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const direction = KEY_DIRECTIONS[event.key];
+      if (!direction) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) {
+        return;
+      }
+
+      event.preventDefault();
+      if (event.repeat || keys.current.has(direction)) {
+        return;
+      }
+
+      keys.current.add(direction);
+      beginRef.current();
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      const direction = KEY_DIRECTIONS[event.key];
+      if (!direction || !keys.current.has(direction)) {
+        return;
+      }
+
+      keys.current.delete(direction);
+      finishRef.current(direction);
+    };
+
+    const releaseAll = () => {
+      const active = DIRECTIONS.filter((direction) => pointerCounts.current[direction] > 0 || keys.current.has(direction));
+      keys.current.clear();
+      pointerCounts.current = { up: 0, down: 0, left: 0, right: 0 };
+      pointerDirections.current.clear();
+      if (active.length > 0) {
+        finishRef.current(active[0]);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', releaseAll);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', releaseAll);
+      stopLoop();
+      document.body.classList.remove('ptz-nudging');
+    };
+  }, []);
+
+  const bindDirection = (direction: Direction) => ({
+    type: 'button' as const,
+    className: held.includes(direction) ? 'is-held' : undefined,
+    'aria-label': direction === 'up' ? 'Tilt up' : direction === 'down' ? 'Tilt down' : direction === 'left' ? 'Pan left' : 'Pan right',
+    onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      pressPointer(direction, event.pointerId);
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Holding still pans when the pointer cannot be captured.
+      }
+    },
+    onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId),
+    onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId),
+    onLostPointerCapture: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId)
+  });
+
   const zoom = (scale: number) => {
-    const nextWidth = clamp(crop.width * scale, 12, 90);
-    const nextHeight = clamp(crop.height * scale, 12, 70);
-    onCropChange(
-      normalizeCrop({
-        x: crop.x + (crop.width - nextWidth) / 2,
-        y: crop.y + (crop.height - nextHeight) / 2,
-        width: nextWidth,
-        height: nextHeight
-      })
-    );
+    onCropChange(zoomCrop(crop, scale));
   };
 
   return (
     <aside className="ptz-panel glass-card">
       <div className="panel-heading">
-        <div>
-          <span className="eyebrow">Camera Module</span>
-          <h2>PTZ Control</h2>
-        </div>
+        <h2>PTZ Control</h2>
         <span className="status-pill online">Online</span>
       </div>
 
       <div className="joystick" aria-label="PTZ directional controls">
-        <button onClick={() => move(0, -crop.height * 0.18)} aria-label="Pan up">
-          <RotateCcw size={18} />
+        <button {...bindDirection('up')}>
+          <ArrowUp size={18} />
         </button>
-        <button onClick={() => move(-crop.width * 0.18, 0)} aria-label="Pan left">
-          <Minus size={18} />
+        <button {...bindDirection('left')}>
+          <ArrowLeft size={18} />
         </button>
-        <button className="home-button" onClick={() => onPresetRecall(presets[0])} aria-label="Recall stage wide">
-          <Home size={20} />
+        <button className="home-button" type="button" onClick={() => onPresetRecall(presets[0])} aria-label="Recall stage wide">
+          <Home size={18} />
         </button>
-        <button onClick={() => move(crop.width * 0.18, 0)} aria-label="Pan right">
-          <Plus size={18} />
+        <button {...bindDirection('right')}>
+          <ArrowRight size={18} />
         </button>
-        <button onClick={() => move(0, crop.height * 0.18)} aria-label="Pan down">
-          <RotateCw size={18} />
+        <button {...bindDirection('down')}>
+          <ArrowDown size={18} />
         </button>
       </div>
 

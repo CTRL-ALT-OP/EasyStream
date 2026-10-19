@@ -1,48 +1,41 @@
 import type { LayoutPreset, PtzPreset } from '../types';
 
-export const defaultCrop = {
-  x: 36,
-  y: 30,
-  width: 28,
-  height: 31.5
-};
-
 export const ptzPresets: PtzPreset[] = [
   {
     id: 'stage-wide',
     label: 'Stage Wide',
     description: 'Full platform and podium',
-    crop: { x: 22, y: 20, width: 56, height: 31.5 }
+    crop: { x: 22, y: 7.75, width: 56, height: 56 }
   },
   {
     id: 'podium',
     label: 'Podium',
     description: 'Speaker close-up',
-    crop: { x: 42, y: 24, width: 18, height: 20.25 }
+    crop: { x: 42, y: 25.125, width: 18, height: 18 }
   },
   {
     id: 'worship',
     label: 'Worship',
     description: 'Left stage group',
-    crop: { x: 18, y: 25, width: 24, height: 27 }
+    crop: { x: 18, y: 26.5, width: 24, height: 24 }
   },
   {
     id: 'audience',
     label: 'Audience',
     description: 'Room response',
-    crop: { x: 28, y: 48, width: 44, height: 24.75 }
+    crop: { x: 28, y: 38.375, width: 44, height: 44 }
   },
   {
     id: 'center-aisle',
     label: 'Center Aisle',
     description: 'Balanced room view',
-    crop: { x: 34, y: 34, width: 32, height: 18 }
+    crop: { x: 34, y: 27, width: 32, height: 32 }
   },
   {
     id: 'right-stage',
     label: 'Right Stage',
     description: 'Panel or host view',
-    crop: { x: 58, y: 28, width: 24, height: 27 }
+    crop: { x: 58, y: 29.5, width: 24, height: 24 }
   }
 ];
 
@@ -66,5 +59,15 @@ export const layoutPresets: LayoutPreset[] = [
     id: 'media-portrait-tight',
     label: 'Media + Tight PTZ',
     description: 'A tighter portrait PTZ variant for a second live preset.'
+  },
+  {
+    id: 'media-camera-below',
+    label: 'Camera Below',
+    description: 'Full media with the PTZ camera underneath.'
+  },
+  {
+    id: 'media-camera-above',
+    label: 'Camera Above',
+    description: 'PTZ camera with the full media underneath.'
   }
 ];

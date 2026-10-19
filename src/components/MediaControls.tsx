@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, FolderOpen, Pause, Play, Presentation, Video } from 'lucide-react';
 import { MediaFrame } from './PreviewFrames';
 import { demoAssets } from '../demo/assets';
@@ -6,13 +7,24 @@ import type { MediaMode, MediaState } from '../types';
 type MediaControlsProps = {
   media: MediaState;
   onMediaChange: (media: MediaState) => void;
+  onPlaybackProgress: (progress: number) => void;
 };
 
-const videoDuration = '02:15';
+const fallbackDuration = 135;
 
-export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
+export function MediaControls({ media, onMediaChange, onPlaybackProgress }: MediaControlsProps) {
+  const [duration, setDuration] = useState(fallbackDuration);
   const currentSlide = media.slideIndex + 1;
   const slideCount = demoAssets.slides.length;
+
+  const togglePlayback = () => {
+    const atEnd = media.progress >= 99.5;
+    onMediaChange({
+      ...media,
+      isPlaying: !media.isPlaying,
+      progress: !media.isPlaying && atEnd ? 0 : media.progress
+    });
+  };
 
   const chooseMedia = (mode: MediaMode) => {
     onMediaChange({
@@ -33,10 +45,7 @@ export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
   return (
     <section className="media-panel glass-card">
       <div className="panel-heading">
-        <div>
-          <span className="eyebrow">Media Source</span>
-          <h2>{media.mode === 'video' ? 'Mock Video Playback' : 'Mock Slideshow'}</h2>
-        </div>
+        <h2>{media.mode === 'video' ? 'Mock Video Playback' : 'Mock Slideshow'}</h2>
         <div className="media-picker">
           <button className="action-button compact">
             <FolderOpen size={17} />
@@ -55,17 +64,18 @@ export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
         </div>
       </div>
 
-      <div className="media-preview-shell">
-        <MediaFrame media={media} />
-        <div className="media-overlay">
-          <span>{media.mode === 'video' ? 'Video file' : 'PowerPoint file'}</span>
-          <strong>{media.mode === 'video' ? 'event-opener-demo.mp4' : 'EasyStream pitch deck.pptx'}</strong>
+      <div className="media-stage">
+        <div className="media-preview-shell">
+          <MediaFrame media={media} onPlaybackProgress={onPlaybackProgress} onDuration={setDuration} />
+          <div className="media-overlay">
+            <span>{media.mode === 'video' ? 'Video file' : 'PowerPoint file'}</span>
+            <strong>{media.mode === 'video' ? 'event-opener-demo.mp4' : 'EasyStream pitch deck.pptx'}</strong>
+          </div>
         </div>
-      </div>
 
-      {media.mode === 'video' ? (
+        {media.mode === 'video' ? (
         <div className="transport-controls">
-          <button className="round-button" onClick={() => onMediaChange({ ...media, isPlaying: !media.isPlaying })}>
+          <button className="round-button" onClick={togglePlayback}>
             {media.isPlaying ? <Pause size={20} /> : <Play size={20} />}
           </button>
           <div className="seek-area">
@@ -77,8 +87,8 @@ export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
               onChange={(event) => onMediaChange({ ...media, progress: Number(event.currentTarget.value) })}
             />
             <div className="time-row">
-              <span>{formatProgress(media.progress)}</span>
-              <span>{videoDuration}</span>
+              <span>{formatClock((media.progress / 100) * duration)}</span>
+              <span>{formatClock(duration)}</span>
             </div>
           </div>
         </div>
@@ -99,16 +109,17 @@ export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
             <ChevronRight size={18} />
           </button>
         </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
 
-function formatProgress(progress: number) {
-  const totalSeconds = Math.round((progress / 100) * 135);
+function formatClock(seconds: number) {
+  const totalSeconds = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(totalSeconds / 60)
     .toString()
     .padStart(2, '0');
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-  return `${minutes}:${seconds}`;
+  const remaining = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remaining}`;
 }
