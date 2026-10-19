@@ -134,10 +134,6 @@ export function MediaFrame({ media, className = '', downsampled = false, onPlayb
     return (
       <div className={`frame media-frame video-frame ${downsampled ? 'downsampled' : ''} ${className}`}>
         <video ref={videoRef} src={demoAssets.video} muted loop playsInline preload="auto" />
-        <div className="video-fallback">
-          <span>LIVE MEDIA</span>
-          <strong>{Math.round(media.progress)}%</strong>
-        </div>
       </div>
     );
   }

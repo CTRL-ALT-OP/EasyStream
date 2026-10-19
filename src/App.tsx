@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { CameraPanel } from './components/CameraPanel';
+import { DevTooltips } from './components/DevTooltips';
 import { MediaControls } from './components/MediaControls';
 import { StreamingControls } from './components/StreamingControls';
 import { layoutPresets, ptzPresets } from './demo/presets';
@@ -43,6 +44,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <DevTooltips />
       <main>
         <CameraPanel
           crop={crop}

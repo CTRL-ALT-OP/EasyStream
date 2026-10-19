@@ -73,7 +73,7 @@ export function StreamingControls({
   const activeLayoutMeta = layouts.find((layout) => layout.id === activeLayout) ?? layouts[0];
 
   return (
-    <section className="streaming-panel glass-card">
+    <section className="streaming-panel glass-card" data-devtip="output">
       <div className="panel-heading">
         <h2>Output</h2>
         <span className={`status-pill ${isStreaming ? 'live' : ''}`}>{isStreaming ? 'Live' : 'Standby'}</span>

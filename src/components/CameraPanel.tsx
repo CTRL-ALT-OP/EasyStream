@@ -98,7 +98,7 @@ export function CameraPanel({
 
   return (
     <section className="camera-section">
-      <div className="camera-view glass-card">
+      <div className="camera-view glass-card" data-devtip="preview">
         <div className="camera-header">
           <h1>{mainFeed === 'wide' ? 'Preview' : 'PTZ'}</h1>
           <div className="camera-hints">
