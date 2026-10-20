@@ -13,7 +13,16 @@ const initialMediaState: MediaState = {
   slideIndex: 0
 };
 
+const clonePresets = (source: PtzPreset[]) => source.map((preset) => ({ ...preset, crop: { ...preset.crop } }));
+
+const sameCrop = (a: CropRect, b: CropRect) =>
+  Math.abs(a.x - b.x) < 0.05 &&
+  Math.abs(a.y - b.y) < 0.05 &&
+  Math.abs(a.width - b.width) < 0.05 &&
+  Math.abs(a.height - b.height) < 0.05;
+
 function App() {
+  const [presets, setPresets] = useState<PtzPreset[]>(() => clonePresets(ptzPresets));
   const [crop, setCrop] = useState<CropRect>(ptzPresets[0].crop);
   const [mainFeed, setMainFeed] = useState<FeedKind>('wide');
   const [activePresetId, setActivePresetId] = useState<string | null>(ptzPresets[0].id);
@@ -32,14 +41,27 @@ function App() {
     });
   }, []);
 
-  const handleCropChange = (nextCrop: CropRect, presetId: string | null = null) => {
+  const handleCropChange = (nextCrop: CropRect) => {
     setCrop(nextCrop);
-    setActivePresetId(presetId);
+    setActivePresetId((currentId) => {
+      if (currentId === null) {
+        return null;
+      }
+
+      const preset = presets.find((item) => item.id === currentId);
+      return preset && sameCrop(preset.crop, nextCrop) ? currentId : null;
+    });
   };
 
   const handlePresetRecall = (preset: PtzPreset) => {
-    setCrop(preset.crop);
+    setCrop({ ...preset.crop });
     setActivePresetId(preset.id);
+  };
+
+  const handlePresetSave = (presetId: string) => {
+    const stored = { ...crop };
+    setPresets((current) => current.map((preset) => (preset.id === presetId ? { ...preset, crop: stored } : preset)));
+    setActivePresetId(presetId);
   };
 
   return (
@@ -49,11 +71,12 @@ function App() {
         <CameraPanel
           crop={crop}
           mainFeed={mainFeed}
-          presets={ptzPresets}
+          presets={presets}
           activePresetId={activePresetId}
           onCropChange={handleCropChange}
           onMainFeedChange={setMainFeed}
           onPresetRecall={handlePresetRecall}
+          onPresetSave={handlePresetSave}
         />
 
         <div className="lower-deck">

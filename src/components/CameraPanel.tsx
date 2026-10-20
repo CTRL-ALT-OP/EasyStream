@@ -13,6 +13,7 @@ type CameraPanelProps = {
   onCropChange: (crop: CropRect, presetId?: string | null) => void;
   onMainFeedChange: (feed: FeedKind) => void;
   onPresetRecall: (preset: PtzPreset) => void;
+  onPresetSave: (presetId: string) => void;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -24,7 +25,8 @@ export function CameraPanel({
   activePresetId,
   onCropChange,
   onMainFeedChange,
-  onPresetRecall
+  onPresetRecall,
+  onPresetSave
 }: CameraPanelProps) {
   const [dragStart, setDragStart] = useState<CropPoint | null>(null);
   const [dragCurrent, setDragCurrent] = useState<CropPoint | null>(null);
@@ -168,6 +170,7 @@ export function CameraPanel({
         activePresetId={activePresetId}
         onCropChange={(nextCrop) => onCropChange(nextCrop, null)}
         onPresetRecall={onPresetRecall}
+        onPresetSave={onPresetSave}
       />
     </section>
   );

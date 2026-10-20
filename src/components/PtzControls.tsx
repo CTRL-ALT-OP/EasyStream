@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Focus, Home, Minus, Plus, ZoomIn } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { panCrop, zoomCrop } from '../lib/crop';
 import type { CropRect, PtzPreset } from '../types';
 
@@ -9,6 +10,7 @@ type PtzControlsProps = {
   activePresetId: string | null;
   onCropChange: (crop: CropRect) => void;
   onPresetRecall: (preset: PtzPreset) => void;
+  onPresetSave: (presetId: string) => void;
 };
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -33,7 +35,7 @@ const TAP_FRACTION = 0.16;
 const HOLD_SPEED = 0.62;
 const TAP_WINDOW_MS = 170;
 
-export function PtzControls({ crop, presets, activePresetId, onCropChange, onPresetRecall }: PtzControlsProps) {
+export function PtzControls({ crop, presets, activePresetId, onCropChange, onPresetRecall, onPresetSave }: PtzControlsProps) {
   const cropRef = useRef(crop);
   const onCropChangeRef = useRef(onCropChange);
   const pointerCounts = useRef<Record<Direction, number>>({ up: 0, down: 0, left: 0, right: 0 });
@@ -43,6 +45,9 @@ export function PtzControls({ crop, presets, activePresetId, onCropChange, onPre
   const moved = useRef(0);
   const gestureStartedAt = useRef(0);
   const [held, setHeld] = useState<Direction[]>([]);
+  const [settingPreset, setSettingPreset] = useState(false);
+  const [presetCutout, setPresetCutout] = useState<DOMRect | null>(null);
+  const presetListRef = useRef<HTMLDivElement>(null);
   const beginRef = useRef<() => void>(() => undefined);
   const finishRef = useRef<(direction: Direction) => void>(() => undefined);
 
@@ -165,6 +170,38 @@ export function PtzControls({ crop, presets, activePresetId, onCropChange, onPre
   beginRef.current = beginGestureIfNeeded;
   finishRef.current = finishGestureIfIdle;
 
+  useLayoutEffect(() => {
+    const node = presetListRef.current;
+    if (!settingPreset || !node) {
+      return;
+    }
+
+    const update = () => setPresetCutout(node.getBoundingClientRect());
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    window.addEventListener('resize', update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [settingPreset, presets]);
+
+  useEffect(() => {
+    if (!settingPreset) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingPreset(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [settingPreset]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const direction = KEY_DIRECTIONS[event.key];
@@ -280,22 +317,57 @@ export function PtzControls({ crop, presets, activePresetId, onCropChange, onPre
         </button>
       </div>
 
-      <div className="preset-list">
+      <div className={`preset-list position-preset-list ${settingPreset ? 'is-setting' : ''}`} ref={presetListRef}>
         <div className="subheading">
           <Focus size={16} />
-          Preset Recalls
+          <span>Preset Recalls</span>
+          <button
+            type="button"
+            className="preset-set-toggle"
+            onClick={() => {
+              setSettingPreset((current) => !current);
+            }}
+          >
+            {settingPreset ? 'Cancel' : 'Set'}
+          </button>
         </div>
         {presets.map((preset) => (
           <button
             key={preset.id}
             className={`preset-button ${activePresetId === preset.id ? 'active' : ''}`}
-            onClick={() => onPresetRecall(preset)}
+            onClick={() => {
+              if (settingPreset) {
+                onPresetSave(preset.id);
+                setSettingPreset(false);
+                return;
+              }
+
+              onPresetRecall(preset);
+            }}
           >
             <span>{preset.label}</span>
             <small>{preset.description}</small>
           </button>
         ))}
       </div>
+      {settingPreset &&
+        presetCutout &&
+        createPortal(
+          <div className="preset-set-scrim" aria-hidden="true">
+            <span style={{ top: 0, left: 0, right: 0, height: presetCutout.top }} />
+            <span style={{ top: presetCutout.top, left: 0, width: presetCutout.left, height: presetCutout.height }} />
+            <span
+              style={{
+                top: presetCutout.top,
+                left: presetCutout.right,
+                right: 0,
+                height: presetCutout.height
+              }}
+            />
+            <span style={{ top: presetCutout.bottom, left: 0, right: 0, bottom: 0 }} />
+          </div>,
+          document.body
+        )}
     </aside>
   );
 }

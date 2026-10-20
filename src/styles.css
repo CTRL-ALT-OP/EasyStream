@@ -348,6 +348,11 @@ main {
 .ptz-outline {
   border: 2px solid var(--accent);
   box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(to right, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
+    linear-gradient(to right, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px));
   transition: all 420ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
@@ -477,12 +482,16 @@ body.ptz-nudging .ptz-frame img {
 
 .preset-list {
   display: grid;
-  flex: 1;
+  flex: 0 1 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   min-height: 0;
   gap: 6px;
   overflow: auto;
+}
+
+.position-preset-list {
+  flex: 1 1 auto;
 }
 
 .subheading {
@@ -491,6 +500,42 @@ body.ptz-nudging .ptz-frame img {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.preset-set-toggle {
+  margin-left: auto;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #242424;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preset-set-toggle:hover {
+  background: var(--hover);
+  border-color: var(--border-strong);
+}
+
+.preset-list.is-setting {
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.preset-set-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.preset-set-scrim span {
+  position: fixed;
+  background: rgba(0, 0, 0, 0.62);
+  pointer-events: auto;
 }
 
 .preset-button {
