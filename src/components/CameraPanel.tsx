@@ -3,30 +3,46 @@ import { useState } from 'react';
 import { centerCropAt, cropFromSelection, type CropPoint } from '../lib/crop';
 import { PtzControls } from './PtzControls';
 import { PtzFrame, WideFrame } from './PreviewFrames';
-import type { CropRect, FeedKind, PtzPreset } from '../types';
+import type { CameraLook, CropRect, FeedKind, LightingPreset, PtzPreset } from '../types';
 
 type CameraPanelProps = {
   crop: CropRect;
+  cameraLook: CameraLook;
+  panZoomSpeed: number;
   mainFeed: FeedKind;
   presets: PtzPreset[];
+  lightingPresets: LightingPreset[];
   activePresetId: string | null;
+  activeLightingPresetId: string | null;
   onCropChange: (crop: CropRect, presetId?: string | null) => void;
+  onCameraLookChange: (look: CameraLook) => void;
+  onPanZoomSpeedChange: (speed: number) => void;
   onMainFeedChange: (feed: FeedKind) => void;
   onPresetRecall: (preset: PtzPreset) => void;
   onPresetSave: (presetId: string) => void;
+  onLightingPresetRecall: (preset: LightingPreset) => void;
+  onLightingPresetSave: (presetId: string) => void;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export function CameraPanel({
   crop,
+  cameraLook,
+  panZoomSpeed,
   mainFeed,
   presets,
+  lightingPresets,
   activePresetId,
+  activeLightingPresetId,
   onCropChange,
+  onCameraLookChange,
+  onPanZoomSpeedChange,
   onMainFeedChange,
   onPresetRecall,
-  onPresetSave
+  onPresetSave,
+  onLightingPresetRecall,
+  onLightingPresetSave
 }: CameraPanelProps) {
   const [dragStart, setDragStart] = useState<CropPoint | null>(null);
   const [dragCurrent, setDragCurrent] = useState<CropPoint | null>(null);
@@ -100,7 +116,7 @@ export function CameraPanel({
 
   return (
     <section className="camera-section">
-      <div className="camera-view glass-card" data-devtip="preview">
+      <div className="camera-view" data-devtip="preview">
         <div className="camera-header">
           <h1>{mainFeed === 'wide' ? 'Preview' : 'PTZ'}</h1>
           <div className="camera-hints">
@@ -124,7 +140,7 @@ export function CameraPanel({
             setDragCurrent(null);
           }}
         >
-          {mainFeed === 'wide' ? <WideFrame /> : <PtzFrame crop={crop} />}
+          {mainFeed === 'wide' ? <WideFrame /> : <PtzFrame crop={crop} look={cameraLook} />}
             <div
               className="pip-feed"
               role="button"
@@ -145,7 +161,7 @@ export function CameraPanel({
                 <Camera size={14} />
                 {pipFeed === 'wide' ? 'Wide' : 'PTZ'}
               </div>
-              {pipFeed === 'wide' ? <WideFrame downsampled /> : <PtzFrame crop={crop} downsampled />}
+              {pipFeed === 'wide' ? <WideFrame downsampled /> : <PtzFrame crop={crop} look={cameraLook} downsampled />}
             </div>
 
             {mainFeed === 'wide' && (
@@ -166,11 +182,19 @@ export function CameraPanel({
 
       <PtzControls
         crop={crop}
+        look={cameraLook}
+        speed={panZoomSpeed}
         presets={presets}
+        lightingPresets={lightingPresets}
         activePresetId={activePresetId}
+        activeLightingPresetId={activeLightingPresetId}
         onCropChange={(nextCrop) => onCropChange(nextCrop, null)}
+        onLookChange={onCameraLookChange}
+        onSpeedChange={onPanZoomSpeedChange}
         onPresetRecall={onPresetRecall}
         onPresetSave={onPresetSave}
+        onLightingPresetRecall={onLightingPresetRecall}
+        onLightingPresetSave={onLightingPresetSave}
       />
     </section>
   );

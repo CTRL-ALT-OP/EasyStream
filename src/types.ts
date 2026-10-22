@@ -14,6 +14,20 @@ export type PtzPreset = {
   crop: CropRect;
 };
 
+export type CameraLook = {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  warmth: number;
+};
+
+export type LightingPreset = {
+  id: string;
+  label: string;
+  description: string;
+  look: CameraLook;
+};
+
 export type LayoutPresetId =
   | 'ptz-full'
   | 'media-full'

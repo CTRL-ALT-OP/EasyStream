@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { demoAssets } from '../demo/assets';
 import { fitCrop, portraitWindow, TIGHT_PORTRAIT_SCALE } from '../lib/crop';
-import type { CropRect, MediaState } from '../types';
+import type { CameraLook, CropRect, MediaState } from '../types';
 
 type PtzFrameProps = {
   crop: CropRect;
+  look?: CameraLook;
   className?: string;
   portrait?: boolean;
   tight?: boolean;
@@ -19,24 +20,33 @@ type MediaFrameProps = {
   onDuration?: (duration: number) => void;
 };
 
-export function PtzFrame({ crop, className = '', portrait = false, tight = false, downsampled = false }: PtzFrameProps) {
+export function PtzFrame({ crop, look, className = '', portrait = false, tight = false, downsampled = false }: PtzFrameProps) {
   const frame = portrait ? portraitWindow(crop, tight ? TIGHT_PORTRAIT_SCALE : 1) : fitCrop(crop);
   const scaleX = 100 / frame.width;
   const scaleY = portrait ? 100 / frame.height : scaleX;
+  const warmth = look?.warmth ?? 0;
+  const tintOpacity = Math.min(Math.abs(warmth) / 100, 0.32);
+  const imageStyle: CSSProperties = {
+    width: `${scaleX * 100}%`,
+    height: `${scaleY * 100}%`,
+    left: `${-frame.x * scaleX}%`,
+    top: `${-frame.y * scaleY}%`,
+    filter: look ? `brightness(${look.brightness}%) contrast(${look.contrast}%) saturate(${look.saturation}%)` : undefined
+  };
+  const tintStyle: CSSProperties = {
+    background: warmth >= 0 ? 'rgb(255, 168, 72)' : 'rgb(76, 148, 255)',
+    opacity: tintOpacity
+  };
 
   return (
     <div className={`frame ptz-frame ${portrait ? 'portrait-frame' : ''} ${downsampled ? 'downsampled' : ''} ${className}`}>
       <img
         src={demoAssets.auditorium}
         alt="Simulated PTZ crop"
-        style={{
-          width: `${scaleX * 100}%`,
-          height: `${scaleY * 100}%`,
-          left: `${-frame.x * scaleX}%`,
-          top: `${-frame.y * scaleY}%`
-        }}
+        style={imageStyle}
         draggable={false}
       />
+      <div className="ptz-lighting-tint" style={tintStyle} />
       <div className="ptz-lens-vignette" />
     </div>
   );

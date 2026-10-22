@@ -43,7 +43,7 @@ export function MediaControls({ media, onMediaChange, onPlaybackProgress }: Medi
   };
 
   return (
-    <section className="media-panel glass-card" data-devtip="media">
+    <section className="media-panel" data-devtip="media">
       <div className="panel-heading">
         <h2>Media</h2>
         <div className="media-picker">

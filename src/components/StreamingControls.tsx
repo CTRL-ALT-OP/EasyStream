@@ -1,10 +1,11 @@
 import { Radio, Settings, Square, Video } from 'lucide-react';
 import { useState } from 'react';
 import { MediaFrame, PtzFrame } from './PreviewFrames';
-import type { CropRect, LayoutPreset, LayoutPresetId, MediaState } from '../types';
+import type { CameraLook, CropRect, LayoutPreset, LayoutPresetId, MediaState } from '../types';
 
 type StreamingControlsProps = {
   crop: CropRect;
+  cameraLook: CameraLook;
   media: MediaState;
   layouts: LayoutPreset[];
   activeLayout: LayoutPresetId;
@@ -15,9 +16,9 @@ type StreamingControlsProps = {
   onRecordingChange: (isRecording: boolean) => void;
 };
 
-function LayoutComposite({ layout, crop, media }: { layout: LayoutPreset; crop: CropRect; media: MediaState }) {
+function LayoutComposite({ layout, crop, cameraLook, media }: { layout: LayoutPreset; crop: CropRect; cameraLook: CameraLook; media: MediaState }) {
   if (layout.id === 'ptz-full') {
-    return <PtzFrame crop={crop} downsampled />;
+    return <PtzFrame crop={crop} look={cameraLook} downsampled />;
   }
 
   if (layout.id === 'media-full') {
@@ -33,7 +34,7 @@ function LayoutComposite({ layout, crop, media }: { layout: LayoutPreset; crop: 
     );
     const cameraFrame = (
       <div className="stack-camera">
-        <PtzFrame crop={crop} downsampled />
+        <PtzFrame crop={crop} look={cameraLook} downsampled />
       </div>
     );
 
@@ -51,7 +52,7 @@ function LayoutComposite({ layout, crop, media }: { layout: LayoutPreset; crop: 
         <MediaFrame media={media} downsampled />
       </div>
       <div className="portrait-slot">
-        <PtzFrame crop={crop} portrait tight={layout.id === 'media-portrait-tight'} downsampled />
+        <PtzFrame crop={crop} look={cameraLook} portrait tight={layout.id === 'media-portrait-tight'} downsampled />
       </div>
     </div>
   );
@@ -59,6 +60,7 @@ function LayoutComposite({ layout, crop, media }: { layout: LayoutPreset; crop: 
 
 export function StreamingControls({
   crop,
+  cameraLook,
   media,
   layouts,
   activeLayout,
@@ -73,7 +75,7 @@ export function StreamingControls({
   const activeLayoutMeta = layouts.find((layout) => layout.id === activeLayout) ?? layouts[0];
 
   return (
-    <section className="streaming-panel glass-card" data-devtip="output">
+    <section className="streaming-panel" data-devtip="output">
       <div className="panel-heading">
         <h2>Output</h2>
         <span className={`status-pill ${isStreaming ? 'live' : ''}`}>{isStreaming ? 'Live' : 'Standby'}</span>
@@ -89,7 +91,7 @@ export function StreamingControls({
             >
               <div className="layout-preview ratio-slot">
                 <div className="ratio-16x9">
-                  <LayoutComposite layout={layout} crop={crop} media={media} />
+                  <LayoutComposite layout={layout} crop={crop} cameraLook={cameraLook} media={media} />
                 </div>
               </div>
               <span className="layout-label">{layout.label}</span>
@@ -105,7 +107,7 @@ export function StreamingControls({
             </div>
             <div className="ratio-slot">
               <div className="ratio-16x9">
-                <LayoutComposite layout={activeLayoutMeta} crop={crop} media={media} />
+                <LayoutComposite layout={activeLayoutMeta} crop={crop} cameraLook={cameraLook} media={media} />
               </div>
             </div>
           </div>

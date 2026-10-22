@@ -1,4 +1,4 @@
-import type { LayoutPreset, PtzPreset } from '../types';
+import type { LayoutPreset, LightingPreset, PtzPreset } from '../types';
 
 export const ptzPresets: PtzPreset[] = [
   {
@@ -36,6 +36,33 @@ export const ptzPresets: PtzPreset[] = [
     label: 'Right Stage',
     description: 'Panel or host view',
     crop: { x: 58, y: 29.5, width: 24, height: 24 }
+  }
+];
+
+export const lightingPresets: LightingPreset[] = [
+  {
+    id: 'neutral',
+    label: 'Neutral',
+    description: 'Natural auditorium balance',
+    look: { brightness: 100, contrast: 100, saturation: 100, warmth: 0 }
+  },
+  {
+    id: 'bright-stage',
+    label: 'Bright Stage',
+    description: 'Lift dim platform light',
+    look: { brightness: 116, contrast: 106, saturation: 104, warmth: 8 }
+  },
+  {
+    id: 'warm-service',
+    label: 'Warm Service',
+    description: 'Amber house lighting',
+    look: { brightness: 104, contrast: 108, saturation: 112, warmth: 32 }
+  },
+  {
+    id: 'cool-led',
+    label: 'Cool LED',
+    description: 'Blue-white fixture wash',
+    look: { brightness: 96, contrast: 110, saturation: 118, warmth: -28 }
   }
 ];
 
