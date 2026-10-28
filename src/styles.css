@@ -74,12 +74,299 @@ button:focus-visible {
   line-height: 1.1;
 }
 
-main {
-  display: grid;
+main.dock-shell {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.dock-menu-bar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: #181818;
+}
+
+.dock-menu {
+  position: relative;
+}
+
+.dock-menu summary {
+  display: flex;
+  align-items: center;
+  min-height: 31px;
+  padding: 0 14px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.dock-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.dock-menu summary:hover {
+  background: var(--hover);
+}
+
+.dock-menu-list {
+  position: absolute;
+  top: 100%;
+  left: 4px;
+  display: grid;
+  min-width: 190px;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.dock-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.dock-menu-list button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.dock-menu-list button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.dock-menu-list span {
+  width: 12px;
+  color: var(--accent);
+}
+
+.dock-board {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-row {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-cell {
+  container-type: size;
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.dock-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.dock-panel > * {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+}
+
+.dock-tabs {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: end;
+  min-width: 0;
+  padding: 4px 32px 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: #181818;
+  cursor: grab;
+}
+
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 160px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dock-panel .panel-heading,
+.dock-panel .camera-header {
+  cursor: grab;
+}
+
+.dock-cell.is-stacked .dock-panel .panel-heading h2,
+.dock-cell.is-stacked .dock-panel .camera-header h1 {
+  display: none;
+}
+
+.dock-panel .camera-hints,
+.dock-panel .panel-heading .status-pill {
+  display: none;
+}
+
+.dock-panel .panel-heading button,
+.dock-panel .camera-header button,
+.dock-panel .panel-heading input,
+.dock-panel .camera-header input,
+.dock-panel .panel-heading [role="button"],
+.dock-panel .camera-header [role="button"] {
+  cursor: pointer;
+}
+
+.dock-tab.active {
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.dock-tab span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-tab-close {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dock-tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.dock-close-button {
+  position: absolute;
+  z-index: 7;
+  top: 9px;
+  right: 10px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: rgba(24, 24, 24, 0.74);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.dock-tabs + .dock-close-button {
+  top: 4px;
+}
+
+.dock-close-button:hover {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.dock-splitter {
+  position: relative;
+  z-index: 6;
+  background: var(--border);
+}
+
+.dock-splitter::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
+.dock-splitter-column {
+  flex: 0 0 1px;
+  cursor: col-resize;
+}
+
+.dock-splitter-row {
+  flex: 0 0 1px;
+  cursor: row-resize;
+}
+
+.dock-cell.is-stack-target::after,
+.dock-row.is-drop-target::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  inset: 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
+.dock-cell.is-insert-before::before,
+.dock-cell.is-insert-after::before {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.dock-cell.is-insert-before::before {
+  left: 2px;
+}
+
+.dock-cell.is-insert-after::before {
+  right: 2px;
 }
 
 .camera-section {
@@ -126,49 +413,20 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  width: min(calc((100cqh - 56px) * 16 / 9), max(180px, calc(100cqw - 300px)));
+  width: 100%;
   max-width: 100%;
   max-height: 100%;
   height: 100%;
   align-self: stretch;
-  justify-self: start;
   gap: 8px;
   overflow: hidden;
 }
 
-.camera-view::after,
-.ptz-extended-controls::before,
-.streaming-panel::after {
-  content: "";
-  position: absolute;
-  top: 18px;
-  bottom: 18px;
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    color-mix(in srgb, var(--border) 45%, transparent) 10px,
-    var(--border) 24px,
-    var(--border) calc(100% - 24px),
-    color-mix(in srgb, var(--border) 45%, transparent) calc(100% - 10px),
-    transparent
-  );
-  pointer-events: none;
-}
-
-.camera-view::after,
-.streaming-panel::after {
-  right: 0;
-}
-
-.ptz-extended-controls::before {
-  left: 0;
-}
-
 .camera-view .main-feed {
   flex: 0 1 auto;
-  width: 100%;
+  width: min(100%, calc((100cqh - 48px) * 16 / 9));
   min-height: 0;
+  align-self: center;
   aspect-ratio: 16 / 9;
   border: 0;
   border-radius: var(--radius);
@@ -181,6 +439,11 @@ main {
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+}
+
+.dock-panel .panel-heading,
+.dock-panel .camera-header {
+  padding-right: 28px;
 }
 
 .camera-header {
@@ -1038,7 +1301,7 @@ body.ptz-nudging .ptz-frame img {
 .media-panel {
   display: flex;
   flex-direction: column;
-  width: min(calc((100cqh - 124px) * 16 / 9), 44cqw);
+  width: 100%;
   max-width: 100%;
   height: 100%;
   gap: 8px;
@@ -1053,10 +1316,11 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .media-stage {
+  container-type: size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
   min-height: 0;
   gap: 8px;
@@ -1076,6 +1340,11 @@ body.ptz-nudging .ptz-frame img {
   height: 10px;
 }
 
+.media-picker.align-left::before {
+  right: auto;
+  left: 0;
+}
+
 .picker-menu {
   position: absolute;
   z-index: 5;
@@ -1091,6 +1360,11 @@ body.ptz-nudging .ptz-frame img {
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
+}
+
+.media-picker.align-left .picker-menu {
+  right: auto;
+  left: 0;
 }
 
 .media-picker:hover .picker-menu,
@@ -1119,10 +1393,12 @@ body.ptz-nudging .ptz-frame img {
 .media-preview-shell {
   position: relative;
   flex: 0 1 auto;
-  width: 100%;
+  width: min(100cqw, calc(max(0px, 100cqh - 48px) * 16 / 9));
   min-height: 0;
+  height: auto;
   aspect-ratio: 16 / 9;
-  max-height: 100%;
+  max-height: calc(100cqh - 48px);
+  align-self: center;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1135,11 +1411,11 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .media-frame img {
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .video-frame video {
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .media-overlay {

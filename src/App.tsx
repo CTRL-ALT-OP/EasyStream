@@ -1,9 +1,12 @@
-import { useCallback, useState } from 'react';
-import { CameraPanel } from './components/CameraPanel';
+import { useCallback, useMemo, useState } from 'react';
+import { CameraPreview } from './components/CameraPreview';
 import { DevTooltips } from './components/DevTooltips';
 import { MediaControls } from './components/MediaControls';
+import { PtzDockProvider, PtzLightingControls, PtzMainControls } from './components/PtzDockControls';
 import { StreamingControls } from './components/StreamingControls';
 import { layoutPresets, lightingPresets as defaultLightingPresets, ptzPresets } from './demo/presets';
+import { DockLayout } from './docks/DockLayout';
+import type { DockBlockDefinition } from './docks/types';
 import type { CameraLook, CropRect, FeedKind, LayoutPresetId, LightingPreset, MediaState, PtzPreset } from './types';
 
 const initialMediaState: MediaState = {
@@ -98,30 +101,76 @@ function App() {
     setActiveLightingPresetId(presetId);
   };
 
-  return (
-    <div className="app-shell">
-      <DevTooltips />
-      <main>
-        <CameraPanel
-          crop={crop}
-          cameraLook={cameraLook}
-          panZoomSpeed={panZoomSpeed}
-          mainFeed={mainFeed}
-          presets={presets}
-          lightingPresets={lightingPresets}
-          activePresetId={activePresetId}
-          activeLightingPresetId={activeLightingPresetId}
-          onCropChange={handleCropChange}
-          onCameraLookChange={handleCameraLookChange}
-          onPanZoomSpeedChange={setPanZoomSpeed}
-          onMainFeedChange={setMainFeed}
-          onPresetRecall={handlePresetRecall}
-          onPresetSave={handlePresetSave}
-          onLightingPresetRecall={handleLightingPresetRecall}
-          onLightingPresetSave={handleLightingPresetSave}
-        />
-
-        <div className="lower-deck">
+  const dockBlocks = useMemo<DockBlockDefinition[]>(
+    () => [
+      {
+        id: 'preview',
+        title: 'Preview',
+        priority: 5,
+        minWidth: 560,
+        minHeight: 320,
+        defaultRow: 0,
+        defaultIndex: 0,
+        content: (
+          <CameraPreview
+            crop={crop}
+            cameraLook={cameraLook}
+            mainFeed={mainFeed}
+            onCropChange={handleCropChange}
+            onMainFeedChange={setMainFeed}
+          />
+        )
+      },
+      {
+        id: 'ptz',
+        title: 'PTZ',
+        priority: 2,
+        minWidth: 252,
+        minHeight: 360,
+        defaultRow: 0,
+        defaultIndex: 1,
+        content: (
+          <PtzMainControls
+            crop={crop}
+            speed={panZoomSpeed}
+            presets={presets}
+            activePresetId={activePresetId}
+            onCropChange={handleCropChange}
+            onPresetRecall={handlePresetRecall}
+            onPresetSave={handlePresetSave}
+          />
+        )
+      },
+      {
+        id: 'lighting',
+        title: 'Lighting',
+        priority: 1,
+        minWidth: 281,
+        minHeight: 400,
+        defaultRow: 0,
+        defaultIndex: 2,
+        content: (
+          <PtzLightingControls
+            look={cameraLook}
+            speed={panZoomSpeed}
+            lightingPresets={lightingPresets}
+            activeLightingPresetId={activeLightingPresetId}
+            onLookChange={handleCameraLookChange}
+            onSpeedChange={setPanZoomSpeed}
+            onLightingPresetRecall={handleLightingPresetRecall}
+            onLightingPresetSave={handleLightingPresetSave}
+          />
+        )
+      },
+      {
+        id: 'output',
+        title: 'Output',
+        priority: 4,
+        minWidth: 520,
+        minHeight: 378,
+        defaultRow: 1,
+        defaultIndex: 0,
+        content: (
           <StreamingControls
             crop={crop}
             cameraLook={cameraLook}
@@ -134,9 +183,42 @@ function App() {
             onStreamingChange={setIsStreaming}
             onRecordingChange={setIsRecording}
           />
-          <MediaControls media={media} onMediaChange={setMedia} onPlaybackProgress={handlePlaybackProgress} />
-        </div>
-      </main>
+        )
+      },
+      {
+        id: 'media',
+        title: 'Media',
+        priority: 3,
+        minWidth: 452,
+        minHeight: 378,
+        defaultRow: 1,
+        defaultIndex: 1,
+        content: <MediaControls media={media} onMediaChange={setMedia} onPlaybackProgress={handlePlaybackProgress} />
+      }
+    ],
+    [
+      activeLayout,
+      activeLightingPresetId,
+      activePresetId,
+      cameraLook,
+      crop,
+      handlePlaybackProgress,
+      isRecording,
+      isStreaming,
+      lightingPresets,
+      mainFeed,
+      media,
+      panZoomSpeed,
+      presets
+    ]
+  );
+
+  return (
+    <div className="app-shell">
+      <DevTooltips />
+      <PtzDockProvider>
+        <DockLayout blocks={dockBlocks} />
+      </PtzDockProvider>
     </div>
   );
 }

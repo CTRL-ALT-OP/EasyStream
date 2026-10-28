@@ -6,7 +6,7 @@ const createWindow = (): void => {
     width: 1440,
     height: 980,
     minWidth: 1180,
-    minHeight: 760,
+    minHeight: 820,
     title: 'EasyStream Demo',
     backgroundColor: '#141414',
     show: false,

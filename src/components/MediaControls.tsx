@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FolderOpen, Pause, Play, Presentation, Video } from 'lucide-react';
 import { MediaFrame } from './PreviewFrames';
 import { demoAssets } from '../demo/assets';
@@ -11,11 +11,31 @@ type MediaControlsProps = {
 };
 
 const fallbackDuration = 135;
+const pickerMenuWidth = 280;
+const viewportMargin = 8;
 
 export function MediaControls({ media, onMediaChange, onPlaybackProgress }: MediaControlsProps) {
   const [duration, setDuration] = useState(fallbackDuration);
+  const [pickerAlign, setPickerAlign] = useState<'left' | 'right'>('right');
+  const pickerRef = useRef<HTMLDivElement>(null);
   const currentSlide = media.slideIndex + 1;
   const slideCount = demoAssets.slides.length;
+
+  const updatePickerAlignment = useCallback(() => {
+    const picker = pickerRef.current;
+    if (!picker) {
+      return;
+    }
+
+    const rect = picker.getBoundingClientRect();
+    setPickerAlign(rect.right - pickerMenuWidth < viewportMargin ? 'left' : 'right');
+  }, []);
+
+  useLayoutEffect(() => {
+    updatePickerAlignment();
+    window.addEventListener('resize', updatePickerAlignment);
+    return () => window.removeEventListener('resize', updatePickerAlignment);
+  }, [updatePickerAlignment]);
 
   const togglePlayback = () => {
     const atEnd = media.progress >= 99.5;
@@ -46,7 +66,7 @@ export function MediaControls({ media, onMediaChange, onPlaybackProgress }: Medi
     <section className="media-panel" data-devtip="media">
       <div className="panel-heading">
         <h2>Media</h2>
-        <div className="media-picker">
+        <div className={`media-picker align-${pickerAlign}`} ref={pickerRef} onPointerEnter={updatePickerAlignment} onFocusCapture={updatePickerAlignment}>
           <button className="action-button compact">
             <FolderOpen size={17} />
             Open File
