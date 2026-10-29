@@ -369,32 +369,7 @@ main.dock-shell {
   right: 2px;
 }
 
-.camera-section {
-  container-type: size;
-  display: grid;
-  grid-template-columns: max-content minmax(280px, 1fr);
-  align-items: stretch;
-  min-width: 0;
-  min-height: 0;
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-}
-
-.camera-section::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 1px;
-  background: var(--border);
-  pointer-events: none;
-}
-
 .camera-view,
-.ptz-panel,
 .streaming-panel,
 .media-panel {
   min-width: 0;
@@ -610,21 +585,6 @@ main.dock-shell {
   opacity: 0.22;
 }
 
-.downsampled {
-  filter: saturate(0.86) contrast(0.92);
-  image-rendering: auto;
-}
-
-.downsampled::after {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 7px 7px;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-}
-
 .pip-feed {
   position: absolute;
   right: 12px;
@@ -683,13 +643,6 @@ body.ptz-nudging .ptz-frame img {
 .selection-rect {
   border: 1px solid #d4c15a;
   background: rgba(212, 193, 90, 0.16);
-}
-
-.ptz-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-  align-items: stretch;
-  overflow: hidden;
 }
 
 .ptz-column {
@@ -765,17 +718,6 @@ body.ptz-nudging .ptz-frame img {
 .zoom-strip button.is-held:hover {
   border-color: var(--border-strong);
   background: #333333;
-}
-
-.ptz-key-hint {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: -2px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.3;
-  text-align: center;
 }
 
 .zoom-strip {
@@ -1042,9 +984,13 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .preset-page-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
   border: 1px solid var(--border);
-  background: #242424;
-  color: var(--text);
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.42;
   transition:
     background 140ms ease,
     border-color 140ms ease;
@@ -1078,15 +1024,6 @@ body.ptz-nudging .ptz-frame img {
   justify-content: center;
   min-width: 0;
   gap: 5px;
-}
-
-.preset-page-dot {
-  width: 6px;
-  height: 6px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--muted);
-  opacity: 0.42;
 }
 
 .preset-page-dot:hover {
@@ -1143,8 +1080,7 @@ body.ptz-nudging .ptz-frame img {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.preset-button small,
-.layout-card small {
+.preset-button small {
   color: var(--muted);
   font-size: 10px;
 }
@@ -1154,15 +1090,6 @@ body.ptz-nudging .ptz-frame img {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.lower-deck {
-  container-type: size;
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  grid-template-columns: minmax(0, 1fr) max-content;
 }
 
 .streaming-panel {

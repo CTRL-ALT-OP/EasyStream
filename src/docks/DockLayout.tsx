@@ -2,13 +2,11 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import {
   applyDockDrop,
   canApplyDockDrop,
-  cellMinWidth,
   createDefaultDockState,
   createDockBlockMap,
   isBlockOpen,
   removeBlockFromDockState,
   resolveDockLayout,
-  rowMinHeight,
   setDockCellActiveBlock
 } from './layout';
 import type { DockBlockDefinition, DockBlockId, DockDimensions, DockDropTarget, DockLayoutState, DockRow } from './types';
@@ -531,16 +529,4 @@ const defaultTargetForBlock = (
   const stackIndex = Math.min(block.defaultIndex, Math.max(0, (row?.cells.length ?? 1) - 1));
   const stackTarget: DockDropTarget = { type: 'stack', rowIndex: block.defaultRow, cellIndex: stackIndex };
   return canApplyDockDrop(withoutBlock, stackTarget, blockId, blocks, dimensions) ? stackTarget : null;
-};
-
-export const getDockMinimumWidth = (blocks: DockBlockDefinition[]) => {
-  const blockMap = createDockBlockMap(blocks);
-  const state = createDefaultDockState(blocks);
-  return Math.max(...state.rows.map((row) => row.cells.reduce((total, cell) => total + cellMinWidth(cell, blockMap), 0)));
-};
-
-export const getDockMinimumHeight = (blocks: DockBlockDefinition[]) => {
-  const blockMap = createDockBlockMap(blocks);
-  const state = createDefaultDockState(blocks);
-  return state.rows.reduce((total, row) => total + rowMinHeight(row, blockMap), 0);
 };

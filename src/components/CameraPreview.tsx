@@ -8,7 +8,7 @@ type CameraPreviewProps = {
   crop: CropRect;
   cameraLook: CameraLook;
   mainFeed: FeedKind;
-  onCropChange: (crop: CropRect, presetId?: string | null) => void;
+  onCropChange: (crop: CropRect) => void;
   onMainFeedChange: (feed: FeedKind) => void;
 };
 
@@ -66,9 +66,9 @@ export function CameraPreview({ crop, cameraLook, mainFeed, onCropChange, onMain
     const distance = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
 
     if (distance < 2.4) {
-      onCropChange(centerCropAt(crop, imagePointFromViewPoint(end)), null);
+      onCropChange(centerCropAt(crop, imagePointFromViewPoint(end)));
     } else {
-      onCropChange(cropFromSelection(imagePointFromViewPoint(dragStart), imagePointFromViewPoint(end)), null);
+      onCropChange(cropFromSelection(imagePointFromViewPoint(dragStart), imagePointFromViewPoint(end)));
     }
 
     setDragStart(null);

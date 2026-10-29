@@ -21,7 +21,6 @@ type MediaFrameProps = {
 type FeedProjectionProviderProps = {
   media: MediaState;
   onPlaybackProgress?: (progress: number) => void;
-  onDuration?: (duration: number) => void;
   children: ReactNode;
 };
 
@@ -161,7 +160,7 @@ export function useMediaPlayback() {
   return useContext(mediaPlaybackContext);
 }
 
-export function FeedProjectionProvider({ media, onPlaybackProgress, onDuration, children }: FeedProjectionProviderProps) {
+export function FeedProjectionProvider({ media, onPlaybackProgress, children }: FeedProjectionProviderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastPublishedProgress = useRef<number | null>(null);
   const [videoFrameSrc, setVideoFrameSrc] = useState<string | null>(null);
@@ -229,7 +228,6 @@ export function FeedProjectionProvider({ media, onPlaybackProgress, onDuration, 
     const publishDuration = () => {
       if (Number.isFinite(video.duration) && video.duration > 0) {
         setDuration(video.duration);
-        onDuration?.(video.duration);
       }
     };
 
@@ -250,7 +248,7 @@ export function FeedProjectionProvider({ media, onPlaybackProgress, onDuration, 
       video.removeEventListener('loadedmetadata', publishDuration);
       video.removeEventListener('timeupdate', publishProgress);
     };
-  }, [media.mode, onDuration, onPlaybackProgress]);
+  }, [media.mode, onPlaybackProgress]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -316,7 +314,7 @@ export const PtzFrame = memo(function PtzFrame({ crop, look, className = '', por
   };
 
   return (
-    <div className={`frame ptz-frame ${portrait ? 'portrait-frame' : ''} ${downsampled ? 'feed-preview' : ''} ${className}`}>
+    <div className={`frame ptz-frame ${portrait ? 'portrait-frame' : ''} ${className}`}>
       <img
         src={downsampled ? projectionSrc : ptzCameraSource}
         alt="Simulated PTZ crop"
@@ -338,7 +336,7 @@ export const WideFrame = memo(function WideFrame({ className = '', downsampled =
   );
 
   return (
-    <div className={`frame wide-frame ${downsampled ? 'feed-preview' : ''} ${className}`}>
+    <div className={`frame wide-frame ${className}`}>
       <img src={downsampled ? projectionSrc : wideCameraSource} alt="Simulated wide-angle auditorium feed" draggable={false} />
       <div className="wide-grid" />
     </div>
@@ -354,14 +352,14 @@ export const MediaFrame = memo(function MediaFrame({ media, className = '', down
     const src = downsampled ? videoPreviewSrc ?? videoFrameSrc ?? videoPosterSrc : videoFrameSrc ?? videoPreviewSrc ?? videoPosterSrc;
 
     return (
-      <div className={`frame media-frame video-frame ${downsampled ? 'feed-preview' : ''} ${className}`}>
+      <div className={`frame media-frame video-frame ${className}`}>
         {src ? <img src={src} alt="Mock video frame" draggable={false} /> : <div className="video-frame-placeholder" />}
       </div>
     );
   }
 
   return (
-    <div className={`frame media-frame slide-frame ${downsampled ? 'feed-preview' : ''} ${className}`}>
+    <div className={`frame media-frame slide-frame ${className}`}>
       <img src={downsampled ? slideProjectionSrc : slide} alt={`Mock presentation slide ${media.slideIndex + 1}`} draggable={false} />
     </div>
   );

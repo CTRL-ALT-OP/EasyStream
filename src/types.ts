@@ -10,7 +10,6 @@ export type CropRect = {
 export type PtzPreset = {
   id: string;
   label: string;
-  description: string;
   crop: CropRect;
 };
 
@@ -39,7 +38,6 @@ export type LayoutPresetId =
 export type LayoutPreset = {
   id: LayoutPresetId;
   label: string;
-  description: string;
 };
 
 export type MediaMode = 'slides' | 'video';

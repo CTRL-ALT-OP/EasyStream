@@ -40,7 +40,6 @@ type LightingField = keyof CameraLook;
 type PresetLike = {
   id: string;
   label: string;
-  description: string;
 };
 
 type PtzPresetThumbnailProps = {
@@ -115,6 +114,46 @@ const choosePresetGrid = ({
   candidates.sort((a, b) => a.score - b.score || a.balance - b.balance || a.columns - b.columns);
   return candidates[0];
 };
+
+function usePresetCutout(isSetting: boolean, listRef: React.RefObject<HTMLDivElement | null>) {
+  const [presetCutout, setPresetCutout] = useState<DOMRect | null>(null);
+
+  useLayoutEffect(() => {
+    const node = listRef.current;
+    if (!isSetting || !node) {
+      setPresetCutout(null);
+      return;
+    }
+
+    const update = () => setPresetCutout(node.getBoundingClientRect());
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    window.addEventListener('resize', update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isSetting, listRef]);
+
+  return presetCutout;
+}
+
+function PresetSetScrim({ cutout }: { cutout: DOMRect | null }) {
+  if (!cutout) {
+    return null;
+  }
+
+  return createPortal(
+    <div className="preset-set-scrim" aria-hidden="true">
+      <span style={{ top: 0, left: 0, right: 0, height: cutout.top }} />
+      <span style={{ top: cutout.top, left: 0, width: cutout.left, height: cutout.height }} />
+      <span style={{ top: cutout.top, left: cutout.right, right: 0, height: cutout.height }} />
+      <span style={{ top: cutout.bottom, left: 0, right: 0, bottom: 0 }} />
+    </div>,
+    document.body
+  );
+}
 
 export function PtzDockProvider({ children }: PtzDockProviderProps) {
   const [settingPositionPreset, setSettingPositionPreset] = useState(false);
@@ -325,27 +364,9 @@ function PagedPresetList<TPreset extends PresetLike>({
 
 export function PtzMainControls({ crop, look, presets, activePresetId, onPresetRecall, onPresetSave }: PtzMainControlsProps) {
   const { settingPositionPreset, setPositionPresetMode } = usePtzDockContext();
-  const { held, heldZoom, bindDirection, zoom } = usePtzMotion();
-  const [presetCutout, setPresetCutout] = useState<DOMRect | null>(null);
+  const { heldZoom, bindDirection, zoom } = usePtzMotion();
   const positionPresetListRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const node = positionPresetListRef.current;
-    if (!settingPositionPreset || !node) {
-      setPresetCutout(null);
-      return;
-    }
-
-    const update = () => setPresetCutout(node.getBoundingClientRect());
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    window.addEventListener('resize', update);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [settingPositionPreset, presets]);
+  const presetCutout = usePresetCutout(settingPositionPreset, positionPresetListRef);
 
   return (
     <section className="ptz-column ptz-main-controls" data-devtip="ptz">
@@ -386,10 +407,6 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
           <span>Zoom In</span>
         </button>
       </div>
-      <p className="ptz-key-hint">
-        <span>WASD moves</span>
-        <span>Q zooms out · E zooms in</span>
-      </p>
 
       <PagedPresetList
         className="position-preset-list"
@@ -426,17 +443,7 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
         )}
       />
 
-      {settingPositionPreset &&
-        presetCutout &&
-        createPortal(
-          <div className="preset-set-scrim" aria-hidden="true">
-            <span style={{ top: 0, left: 0, right: 0, height: presetCutout.top }} />
-            <span style={{ top: presetCutout.top, left: 0, width: presetCutout.left, height: presetCutout.height }} />
-            <span style={{ top: presetCutout.top, left: presetCutout.right, right: 0, height: presetCutout.height }} />
-            <span style={{ top: presetCutout.bottom, left: 0, right: 0, bottom: 0 }} />
-          </div>,
-          document.body
-        )}
+      <PresetSetScrim cutout={presetCutout} />
     </section>
   );
 }
@@ -452,26 +459,8 @@ export function PtzLightingControls({
   onLightingPresetSave
 }: PtzLightingControlsProps) {
   const { settingLightingPreset, setLightingPresetMode } = usePtzDockContext();
-  const [presetCutout, setPresetCutout] = useState<DOMRect | null>(null);
   const lightingPresetListRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const node = lightingPresetListRef.current;
-    if (!settingLightingPreset || !node) {
-      setPresetCutout(null);
-      return;
-    }
-
-    const update = () => setPresetCutout(node.getBoundingClientRect());
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    window.addEventListener('resize', update);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, [settingLightingPreset, lightingPresets]);
+  const presetCutout = usePresetCutout(settingLightingPreset, lightingPresetListRef);
 
   const updateLook = (field: LightingField, value: number) => {
     onLookChange({ ...look, [field]: value });
@@ -558,17 +547,7 @@ export function PtzLightingControls({
         )}
       />
 
-      {settingLightingPreset &&
-        presetCutout &&
-        createPortal(
-          <div className="preset-set-scrim" aria-hidden="true">
-            <span style={{ top: 0, left: 0, right: 0, height: presetCutout.top }} />
-            <span style={{ top: presetCutout.top, left: 0, width: presetCutout.left, height: presetCutout.height }} />
-            <span style={{ top: presetCutout.top, left: presetCutout.right, right: 0, height: presetCutout.height }} />
-            <span style={{ top: presetCutout.bottom, left: 0, right: 0, bottom: 0 }} />
-          </div>,
-          document.body
-        )}
+      <PresetSetScrim cutout={presetCutout} />
     </section>
   );
 }
