@@ -1,7 +1,8 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Focus, Gauge, Home, Minus, Plus, SlidersHorizontal, Sun, ZoomIn } from 'lucide-react';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Focus, Gauge, Home, Minus, Plus, SlidersHorizontal, Sun, ZoomIn } from 'lucide-react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { panCrop, zoomCrop } from '../lib/crop';
+import { PtzFrame } from './PreviewFrames';
 import type { CameraLook, CropRect, LightingPreset, PtzPreset } from '../types';
 
 type PtzDockContextValue = {
@@ -17,6 +18,7 @@ type PtzDockProviderProps = {
 
 type PtzMainControlsProps = {
   crop: CropRect;
+  look: CameraLook;
   speed: number;
   presets: PtzPreset[];
   activePresetId: string | null;
@@ -38,6 +40,16 @@ type PtzLightingControlsProps = {
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 type LightingField = keyof CameraLook;
+type PresetLike = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+type PtzPresetThumbnailProps = {
+  crop: CropRect;
+  look: CameraLook;
+};
 
 const PtzDockContext = createContext<PtzDockContextValue | null>(null);
 const DIRECTIONS: Direction[] = ['up', 'down', 'left', 'right'];
@@ -56,6 +68,72 @@ const KEY_DIRECTIONS: Record<string, Direction> = {
 const TAP_FRACTION = 0.16;
 const HOLD_SPEED = 0.62;
 const TAP_WINDOW_MS = 170;
+const PRESET_CARD_MIN_WIDTH = 96;
+const PRESET_CARD_ESTIMATED_HEIGHT = 58;
+const PRESET_GRID_GAP = 6;
+
+const estimatePresetCardHeight = (
+  containerWidth: number,
+  columns: number,
+  estimatedHeight: number,
+  aspectRatio: number | undefined
+) => {
+  if (!aspectRatio) {
+    return estimatedHeight;
+  }
+
+  const columnWidth = (containerWidth - PRESET_GRID_GAP * (columns - 1)) / columns;
+  const titleAndPaddingHeight = 31;
+  return columnWidth / aspectRatio + titleAndPaddingHeight;
+};
+
+const choosePresetGrid = ({
+  itemCount,
+  containerWidth,
+  availableHeight,
+  maxColumns,
+  requireAllItems,
+  cardEstimatedHeight,
+  cardAspectRatio
+}: {
+  itemCount: number;
+  containerWidth: number;
+  availableHeight: number;
+  maxColumns: number;
+  requireAllItems: boolean;
+  cardEstimatedHeight: number;
+  cardAspectRatio?: number;
+}) => {
+  const candidates = Array.from({ length: maxColumns }, (_, index) => {
+    const columns = index + 1;
+    const cardHeight = estimatePresetCardHeight(containerWidth, columns, cardEstimatedHeight, cardAspectRatio);
+    const maxRows = Math.max(0, Math.floor((availableHeight + PRESET_GRID_GAP) / (cardHeight + PRESET_GRID_GAP)));
+    const rowsNeeded = Math.max(1, Math.ceil(itemCount / columns));
+    const rows = requireAllItems ? rowsNeeded : Math.min(maxRows, rowsNeeded);
+    return {
+      columns,
+      rows,
+      capacity: columns * rows,
+      balance: Math.abs(columns - rows),
+      cardHeight,
+      score: columns + rows,
+      valid: rows <= maxRows
+    };
+  }).filter((candidate) => candidate.valid && candidate.capacity > 0 && candidate.rows > 0);
+
+  const fallback = { columns: 1, rows: 1, capacity: 1 };
+  if (candidates.length === 0) {
+    return fallback;
+  }
+
+  if (!requireAllItems) {
+    candidates.sort((a, b) => b.capacity - a.capacity || a.score - b.score || a.balance - b.balance || a.columns - b.columns);
+    return candidates[0];
+  }
+
+  candidates.sort((a, b) => a.score - b.score || a.balance - b.balance || a.columns - b.columns);
+  return candidates[0];
+};
 
 export function PtzDockProvider({ children }: PtzDockProviderProps) {
   const [settingPositionPreset, setSettingPositionPreset] = useState(false);
@@ -111,7 +189,170 @@ function usePtzDockContext() {
   return context;
 }
 
-export function PtzMainControls({ crop, speed, presets, activePresetId, onCropChange, onPresetRecall, onPresetSave }: PtzMainControlsProps) {
+function PtzPresetThumbnail({ crop, look }: PtzPresetThumbnailProps) {
+  const [frameTick, setFrameTick] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setFrameTick((current) => (current + 1) % 1000);
+    }, 100);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="preset-live-preview" data-frame-tick={frameTick}>
+      <PtzFrame crop={crop} look={look} downsampled />
+    </div>
+  );
+}
+
+function PagedPresetList<TPreset extends PresetLike>({
+  className,
+  isSetting,
+  listRef,
+  icon,
+  title,
+  setLabel,
+  items,
+  activeId,
+  onSetToggle,
+  cardMinWidth = PRESET_CARD_MIN_WIDTH,
+  cardEstimatedHeight = PRESET_CARD_ESTIMATED_HEIGHT,
+  cardAspectRatio,
+  renderItem
+}: {
+  className: string;
+  isSetting: boolean;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  icon: React.ReactNode;
+  title: string;
+  setLabel: string;
+  items: TPreset[];
+  activeId: string | null;
+  onSetToggle: () => void;
+  cardMinWidth?: number;
+  cardEstimatedHeight?: number;
+  cardAspectRatio?: number;
+  renderItem: (item: TPreset) => React.ReactNode;
+}) {
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(4);
+  const [showPager, setShowPager] = useState(true);
+  const [pageColumns, setPageColumns] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const pageStart = page * pageSize;
+  const visibleItems = useMemo(() => items.slice(pageStart, pageStart + pageSize), [items, pageSize, pageStart]);
+
+  useLayoutEffect(() => {
+    const node = listRef.current;
+    if (!node) {
+      return;
+    }
+
+    const updatePageSize = () => {
+      const headingHeight = node.querySelector('.subheading')?.getBoundingClientRect().height ?? 26;
+      const maxColumns = Math.max(1, Math.floor((node.clientWidth + PRESET_GRID_GAP) / (cardMinWidth + PRESET_GRID_GAP)));
+      const noPagerHeight = Math.max(0, node.clientHeight - headingHeight - PRESET_GRID_GAP);
+      const noPagerGrid = choosePresetGrid({
+        itemCount: items.length,
+        containerWidth: node.clientWidth,
+        availableHeight: noPagerHeight,
+        maxColumns,
+        requireAllItems: true,
+        cardEstimatedHeight,
+        cardAspectRatio
+      });
+      const noPagerPageSize = noPagerGrid.capacity;
+
+      if (items.length <= noPagerPageSize) {
+        setShowPager(false);
+        setPageSize(noPagerPageSize);
+        setPageColumns(noPagerGrid.columns);
+        return;
+      }
+
+      const pagerHeight = node.querySelector('.preset-pager')?.getBoundingClientRect().height ?? 16;
+      const availableHeight = Math.max(0, node.clientHeight - headingHeight - pagerHeight - PRESET_GRID_GAP * 2);
+      const pagerGrid = choosePresetGrid({
+        itemCount: items.length,
+        containerWidth: node.clientWidth,
+        availableHeight,
+        maxColumns,
+        requireAllItems: false,
+        cardEstimatedHeight,
+        cardAspectRatio
+      });
+      setShowPager(true);
+      setPageSize(Math.max(1, pagerGrid.capacity));
+      setPageColumns(pagerGrid.columns);
+    };
+
+    updatePageSize();
+    const observer = new ResizeObserver(updatePageSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [cardAspectRatio, cardEstimatedHeight, cardMinWidth, items.length, listRef]);
+
+  useEffect(() => {
+    setPage((current) => (showPager ? Math.min(current, totalPages - 1) : 0));
+  }, [showPager, totalPages]);
+
+  useEffect(() => {
+    if (!activeId || !showPager) {
+      return;
+    }
+
+    const activeIndex = items.findIndex((item) => item.id === activeId);
+    if (activeIndex >= 0) {
+      setPage(Math.floor(activeIndex / pageSize));
+    }
+  }, [activeId, items, pageSize, showPager]);
+
+  const previousPage = () => setPage((current) => (current + totalPages - 1) % totalPages);
+  const nextPage = () => setPage((current) => (current + 1) % totalPages);
+
+  return (
+    <div className={`preset-list ${showPager ? 'has-pager' : 'no-pager'} ${className} ${isSetting ? 'is-setting' : ''}`} ref={listRef}>
+      <div className="subheading">
+        {icon}
+        <span>{title}</span>
+        <button type="button" className="preset-set-toggle" onClick={onSetToggle}>
+          {setLabel}
+        </button>
+      </div>
+
+      <div className="preset-page-items" style={{ gridTemplateColumns: `repeat(${pageColumns}, minmax(0, 1fr))` }}>
+        {visibleItems.map((item) => renderItem(item))}
+      </div>
+
+      {showPager && (
+        <div className="preset-pager" aria-label={`${title} pages`}>
+          <button type="button" className="preset-page-arrow" onClick={previousPage} aria-label={`Previous ${title} page`}>
+            <ChevronLeft size={13} />
+          </button>
+          <div className="preset-page-dots">
+            {Array.from({ length: totalPages }, (_, index) => (
+              <button
+                type="button"
+                className={`preset-page-dot ${index === page ? 'active' : ''}`}
+                key={index}
+                onClick={() => setPage(index)}
+                aria-label={`${title} page ${index + 1}`}
+                aria-current={index === page ? 'page' : undefined}
+              />
+            ))}
+          </div>
+          <button type="button" className="preset-page-arrow" onClick={nextPage} aria-label={`Next ${title} page`}>
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PtzMainControls({ crop, look, speed, presets, activePresetId, onCropChange, onPresetRecall, onPresetSave }: PtzMainControlsProps) {
   const { settingPositionPreset, setPositionPresetMode } = usePtzDockContext();
   const cropRef = useRef(crop);
   const onCropChangeRef = useRef(onCropChange);
@@ -383,18 +624,23 @@ export function PtzMainControls({ crop, speed, presets, activePresetId, onCropCh
         </button>
       </div>
 
-      <div className={`preset-list position-preset-list ${settingPositionPreset ? 'is-setting' : ''}`} ref={positionPresetListRef}>
-        <div className="subheading">
-          <Focus size={16} />
-          <span>Preset Recalls</span>
-          <button type="button" className="preset-set-toggle" onClick={() => setPositionPresetMode(!settingPositionPreset)}>
-            {settingPositionPreset ? 'Cancel' : 'Set'}
-          </button>
-        </div>
-        {presets.map((preset) => (
+      <PagedPresetList
+        className="position-preset-list"
+        isSetting={settingPositionPreset}
+        listRef={positionPresetListRef}
+        icon={<Focus size={16} />}
+        title="Preset Recalls"
+        setLabel={settingPositionPreset ? 'Cancel' : 'Set'}
+        items={presets}
+        activeId={activePresetId}
+        onSetToggle={() => setPositionPresetMode(!settingPositionPreset)}
+        cardMinWidth={96}
+        cardEstimatedHeight={84}
+        cardAspectRatio={16 / 9}
+        renderItem={(preset) => (
           <button
             key={preset.id}
-            className={`preset-button ${activePresetId === preset.id ? 'active' : ''}`}
+            className={`preset-button position-preset-card ${activePresetId === preset.id ? 'active' : ''}`}
             onClick={() => {
               if (settingPositionPreset) {
                 onPresetSave(preset.id);
@@ -405,11 +651,13 @@ export function PtzMainControls({ crop, speed, presets, activePresetId, onCropCh
               onPresetRecall(preset);
             }}
           >
+            <div className="preset-preview">
+              <PtzPresetThumbnail crop={preset.crop} look={look} />
+            </div>
             <span>{preset.label}</span>
-            <small>{preset.description}</small>
           </button>
-        ))}
-      </div>
+        )}
+      />
 
       {settingPositionPreset &&
         presetCutout &&
@@ -513,15 +761,17 @@ export function PtzLightingControls({
         ))}
       </div>
 
-      <div className={`preset-list lighting-preset-list ${settingLightingPreset ? 'is-setting' : ''}`} ref={lightingPresetListRef}>
-        <div className="subheading">
-          <SlidersHorizontal size={16} />
-          <span>Lighting Presets</span>
-          <button type="button" className="preset-set-toggle" onClick={() => setLightingPresetMode(!settingLightingPreset)}>
-            {settingLightingPreset ? 'Cancel' : 'Set'}
-          </button>
-        </div>
-        {lightingPresets.map((preset) => (
+      <PagedPresetList
+        className="lighting-preset-list"
+        isSetting={settingLightingPreset}
+        listRef={lightingPresetListRef}
+        icon={<SlidersHorizontal size={16} />}
+        title="Lighting Presets"
+        setLabel={settingLightingPreset ? 'Cancel' : 'Set'}
+        items={lightingPresets}
+        activeId={activeLightingPresetId}
+        onSetToggle={() => setLightingPresetMode(!settingLightingPreset)}
+        renderItem={(preset) => (
           <button
             key={preset.id}
             className={`preset-button ${activeLightingPresetId === preset.id ? 'active' : ''}`}
@@ -538,8 +788,8 @@ export function PtzLightingControls({
             <span>{preset.label}</span>
             <small>{preset.description}</small>
           </button>
-        ))}
-      </div>
+        )}
+      />
 
       {settingLightingPreset &&
         presetCutout &&

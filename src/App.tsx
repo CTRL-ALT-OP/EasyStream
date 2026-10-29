@@ -132,6 +132,7 @@ function App() {
         content: (
           <PtzMainControls
             crop={crop}
+            look={cameraLook}
             speed={panZoomSpeed}
             presets={presets}
             activePresetId={activePresetId}
