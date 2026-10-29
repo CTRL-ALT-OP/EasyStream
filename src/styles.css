@@ -760,9 +760,22 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .joystick button.is-held,
-.joystick button.is-held:hover {
+.joystick button.is-held:hover,
+.zoom-strip button.is-held,
+.zoom-strip button.is-held:hover {
   border-color: var(--border-strong);
   background: #333333;
+}
+
+.ptz-key-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
 }
 
 .zoom-strip {

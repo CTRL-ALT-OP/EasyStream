@@ -3,6 +3,7 @@ import { CameraPreview } from './components/CameraPreview';
 import { DevTooltips } from './components/DevTooltips';
 import { MediaControls } from './components/MediaControls';
 import { FeedProjectionProvider } from './components/PreviewFrames';
+import { PtzMotionProvider } from './components/PtzMotion';
 import { PtzDockProvider, PtzLightingControls, PtzMainControls } from './components/PtzDockControls';
 import { StreamingControls } from './components/StreamingControls';
 import { layoutPresets, lightingPresets as defaultLightingPresets, ptzPresets } from './demo/presets';
@@ -134,10 +135,8 @@ function App() {
           <PtzMainControls
             crop={crop}
             look={cameraLook}
-            speed={panZoomSpeed}
             presets={presets}
             activePresetId={activePresetId}
-            onCropChange={handleCropChange}
             onPresetRecall={handlePresetRecall}
             onPresetSave={handlePresetSave}
           />
@@ -219,7 +218,9 @@ function App() {
       <DevTooltips />
       <FeedProjectionProvider media={media} onPlaybackProgress={handlePlaybackProgress}>
         <PtzDockProvider>
-          <DockLayout blocks={dockBlocks} />
+          <PtzMotionProvider crop={crop} speed={panZoomSpeed} onCropChange={handleCropChange}>
+            <DockLayout blocks={dockBlocks} />
+          </PtzMotionProvider>
         </PtzDockProvider>
       </FeedProjectionProvider>
     </div>
