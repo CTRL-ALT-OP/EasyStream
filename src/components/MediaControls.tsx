@@ -1,23 +1,23 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FolderOpen, Pause, Play, Presentation, Video } from 'lucide-react';
-import { MediaFrame } from './PreviewFrames';
+import { MediaFrame, useMediaPlayback } from './PreviewFrames';
 import { demoAssets } from '../demo/assets';
 import type { MediaMode, MediaState } from '../types';
 
 type MediaControlsProps = {
   media: MediaState;
   onMediaChange: (media: MediaState) => void;
-  onPlaybackProgress: (progress: number) => void;
 };
 
 const fallbackDuration = 135;
 const pickerMenuWidth = 280;
 const viewportMargin = 8;
 
-export function MediaControls({ media, onMediaChange, onPlaybackProgress }: MediaControlsProps) {
-  const [duration, setDuration] = useState(fallbackDuration);
+export function MediaControls({ media, onMediaChange }: MediaControlsProps) {
   const [pickerAlign, setPickerAlign] = useState<'left' | 'right'>('right');
   const pickerRef = useRef<HTMLDivElement>(null);
+  const { duration } = useMediaPlayback();
+  const displayDuration = duration || fallbackDuration;
   const currentSlide = media.slideIndex + 1;
   const slideCount = demoAssets.slides.length;
 
@@ -86,7 +86,7 @@ export function MediaControls({ media, onMediaChange, onPlaybackProgress }: Medi
 
       <div className="media-stage">
         <div className="media-preview-shell">
-          <MediaFrame media={media} onPlaybackProgress={onPlaybackProgress} onDuration={setDuration} />
+          <MediaFrame media={media} />
           <div className="media-overlay">
             <span>{media.mode === 'video' ? 'Video file' : 'PowerPoint file'}</span>
             <strong>{media.mode === 'video' ? 'event-opener-demo.mp4' : 'EasyStream pitch deck.pptx'}</strong>
@@ -107,8 +107,8 @@ export function MediaControls({ media, onMediaChange, onPlaybackProgress }: Medi
               onChange={(event) => onMediaChange({ ...media, progress: Number(event.currentTarget.value) })}
             />
             <div className="time-row">
-              <span>{formatClock((media.progress / 100) * duration)}</span>
-              <span>{formatClock(duration)}</span>
+              <span>{formatClock((media.progress / 100) * displayDuration)}</span>
+              <span>{formatClock(displayDuration)}</span>
             </div>
           </div>
         </div>

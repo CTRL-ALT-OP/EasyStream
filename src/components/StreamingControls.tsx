@@ -1,5 +1,5 @@
 import { Radio, Settings, Square, Video } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { MediaFrame, PtzFrame } from './PreviewFrames';
 import type { CameraLook, CropRect, LayoutPreset, LayoutPresetId, MediaState } from '../types';
 
@@ -16,25 +16,37 @@ type StreamingControlsProps = {
   onRecordingChange: (isRecording: boolean) => void;
 };
 
-function LayoutComposite({ layout, crop, cameraLook, media }: { layout: LayoutPreset; crop: CropRect; cameraLook: CameraLook; media: MediaState }) {
+const LayoutComposite = memo(function LayoutComposite({
+  layout,
+  crop,
+  cameraLook,
+  media,
+  preview = false
+}: {
+  layout: LayoutPreset;
+  crop: CropRect;
+  cameraLook: CameraLook;
+  media: MediaState;
+  preview?: boolean;
+}) {
   if (layout.id === 'ptz-full') {
-    return <PtzFrame crop={crop} look={cameraLook} downsampled />;
+    return <PtzFrame crop={crop} look={cameraLook} downsampled={preview} />;
   }
 
   if (layout.id === 'media-full') {
-    return <MediaFrame media={media} downsampled />;
+    return <MediaFrame media={media} downsampled={preview} />;
   }
 
   if (layout.id === 'media-camera-below' || layout.id === 'media-camera-above') {
     const cameraAbove = layout.id === 'media-camera-above';
     const mediaFrame = (
       <div className="composite-media">
-        <MediaFrame media={media} downsampled />
+        <MediaFrame media={media} downsampled={preview} />
       </div>
     );
     const cameraFrame = (
       <div className="stack-camera">
-        <PtzFrame crop={crop} look={cameraLook} downsampled />
+        <PtzFrame crop={crop} look={cameraLook} downsampled={preview} />
       </div>
     );
 
@@ -49,14 +61,14 @@ function LayoutComposite({ layout, crop, cameraLook, media }: { layout: LayoutPr
   return (
     <div className="composite-layout">
       <div className="composite-media">
-        <MediaFrame media={media} downsampled />
+        <MediaFrame media={media} downsampled={preview} />
       </div>
       <div className="portrait-slot">
-        <PtzFrame crop={crop} look={cameraLook} portrait tight={layout.id === 'media-portrait-tight'} downsampled />
+        <PtzFrame crop={crop} look={cameraLook} portrait tight={layout.id === 'media-portrait-tight'} downsampled={preview} />
       </div>
     </div>
   );
-}
+});
 
 export function StreamingControls({
   crop,
@@ -91,7 +103,7 @@ export function StreamingControls({
             >
               <div className="layout-preview ratio-slot">
                 <div className="ratio-16x9">
-                  <LayoutComposite layout={layout} crop={crop} cameraLook={cameraLook} media={media} />
+                  <LayoutComposite layout={layout} crop={crop} cameraLook={cameraLook} media={media} preview />
                 </div>
               </div>
               <span className="layout-label">{layout.label}</span>

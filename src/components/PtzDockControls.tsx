@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Focus, Gauge, Home, Minus, Plus, SlidersHorizontal, Sun, ZoomIn } from 'lucide-react';
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { panCrop, zoomCrop } from '../lib/crop';
 import { PtzFrame } from './PreviewFrames';
@@ -189,23 +189,13 @@ function usePtzDockContext() {
   return context;
 }
 
-function PtzPresetThumbnail({ crop, look }: PtzPresetThumbnailProps) {
-  const [frameTick, setFrameTick] = useState(0);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setFrameTick((current) => (current + 1) % 1000);
-    }, 100);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
+const PtzPresetThumbnail = memo(function PtzPresetThumbnail({ crop, look }: PtzPresetThumbnailProps) {
   return (
-    <div className="preset-live-preview" data-frame-tick={frameTick}>
+    <div className="preset-live-preview">
       <PtzFrame crop={crop} look={look} downsampled />
     </div>
   );
-}
+});
 
 function PagedPresetList<TPreset extends PresetLike>({
   className,

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { CameraPreview } from './components/CameraPreview';
 import { DevTooltips } from './components/DevTooltips';
 import { MediaControls } from './components/MediaControls';
+import { FeedProjectionProvider } from './components/PreviewFrames';
 import { PtzDockProvider, PtzLightingControls, PtzMainControls } from './components/PtzDockControls';
 import { StreamingControls } from './components/StreamingControls';
 import { layoutPresets, lightingPresets as defaultLightingPresets, ptzPresets } from './demo/presets';
@@ -194,7 +195,7 @@ function App() {
         minHeight: 378,
         defaultRow: 1,
         defaultIndex: 1,
-        content: <MediaControls media={media} onMediaChange={setMedia} onPlaybackProgress={handlePlaybackProgress} />
+        content: <MediaControls media={media} onMediaChange={setMedia} />
       }
     ],
     [
@@ -203,7 +204,6 @@ function App() {
       activePresetId,
       cameraLook,
       crop,
-      handlePlaybackProgress,
       isRecording,
       isStreaming,
       lightingPresets,
@@ -217,9 +217,11 @@ function App() {
   return (
     <div className="app-shell">
       <DevTooltips />
-      <PtzDockProvider>
-        <DockLayout blocks={dockBlocks} />
-      </PtzDockProvider>
+      <FeedProjectionProvider media={media} onPlaybackProgress={handlePlaybackProgress}>
+        <PtzDockProvider>
+          <DockLayout blocks={dockBlocks} />
+        </PtzDockProvider>
+      </FeedProjectionProvider>
     </div>
   );
 }

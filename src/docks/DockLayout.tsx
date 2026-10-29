@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   applyDockDrop,
   canApplyDockDrop,
@@ -11,7 +11,7 @@ import {
   rowMinHeight,
   setDockCellActiveBlock
 } from './layout';
-import type { DockBlockDefinition, DockBlockId, DockDimensions, DockDropTarget, DockLayoutState } from './types';
+import type { DockBlockDefinition, DockBlockId, DockDimensions, DockDropTarget, DockLayoutState, DockRow } from './types';
 
 type DragState = {
   blockId: DockBlockId;
@@ -44,34 +44,166 @@ type DockLayoutProps = {
 
 const interactiveSelector = 'button, input, select, textarea, a, [role="button"], [contenteditable="true"], .dock-close-button';
 const DOCK_HEADER_DRAG_HEIGHT = 42;
+const DOCK_MENU_BAR_HEIGHT = 32;
+const DOCK_LAYOUT_STORAGE_KEY = 'easystream.dockLayout.v1';
+const EMPTY_DOCK_DIMENSIONS: DockDimensions = { width: 0, height: 0 };
+
+const estimateBoardSize = (): DockDimensions | null => {
+  const width = window.innerWidth;
+  const height = window.innerHeight - DOCK_MENU_BAR_HEIGHT;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { width, height };
+};
+
+const sameBoardSize = (current: DockDimensions | null, width: number, height: number) =>
+  current !== null && Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5;
 
 const cloneLayoutState = (state: DockLayoutState): DockLayoutState => ({
   rows: state.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => ({ ...cell, blockIds: [...cell.blockIds] })) }))
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const finiteNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+const normalizeStoredDockLayout = (value: unknown, blocks: DockBlockDefinition[]): DockLayoutState | null => {
+  const candidate = isRecord(value) && value.version === 1 && 'layout' in value ? value.layout : value;
+  if (!isRecord(candidate) || !Array.isArray(candidate.rows)) {
+    return null;
+  }
+
+  const defaultLayout = createDefaultDockState(blocks);
+  if (candidate.rows.length !== defaultLayout.rows.length) {
+    return null;
+  }
+
+  const validBlockIds = new Set(blocks.map((block) => block.id));
+  const usedBlockIds = new Set<DockBlockId>();
+  const rows: DockRow[] = [];
+
+  for (const [rowIndex, storedRow] of candidate.rows.entries()) {
+    if (!isRecord(storedRow) || !Array.isArray(storedRow.cells)) {
+      return null;
+    }
+
+    const rowSize = finiteNumber(storedRow.size);
+    const row: DockRow = {
+      id: typeof storedRow.id === 'string' ? storedRow.id : (defaultLayout.rows[rowIndex]?.id ?? `row-${rowIndex}`),
+      size: Math.max(0, rowSize ?? defaultLayout.rows[rowIndex]?.size ?? 0),
+      cells: []
+    };
+
+    for (const storedCell of storedRow.cells) {
+      if (!isRecord(storedCell) || !Array.isArray(storedCell.blockIds)) {
+        return null;
+      }
+
+      const blockIds = storedCell.blockIds.filter((blockId): blockId is DockBlockId => {
+        if (typeof blockId !== 'string' || !validBlockIds.has(blockId as DockBlockId) || usedBlockIds.has(blockId as DockBlockId)) {
+          return false;
+        }
+
+        usedBlockIds.add(blockId as DockBlockId);
+        return true;
+      });
+
+      if (blockIds.length === 0) {
+        continue;
+      }
+
+      const cellSize = finiteNumber(storedCell.size);
+      const activeBlockId =
+        typeof storedCell.activeBlockId === 'string' && blockIds.includes(storedCell.activeBlockId as DockBlockId)
+          ? (storedCell.activeBlockId as DockBlockId)
+          : blockIds[0];
+
+      row.cells.push({
+        id: typeof storedCell.id === 'string' ? storedCell.id : `cell-${blockIds.join('-')}`,
+        blockIds,
+        activeBlockId,
+        size: Math.max(0, cellSize ?? 0)
+      });
+    }
+
+    rows.push(row);
+  }
+
+  return { rows };
+};
+
+const readStoredDockLayout = (blocks: DockBlockDefinition[]) => {
+  try {
+    const stored = window.localStorage.getItem(DOCK_LAYOUT_STORAGE_KEY);
+    return stored ? normalizeStoredDockLayout(JSON.parse(stored), blocks) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveDockLayout = (layout: DockLayoutState) => {
+  try {
+    window.localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify({ version: 1, layout: cloneLayoutState(layout) }));
+  } catch {
+    // Ignore storage failures; the in-memory layout should continue to work.
+  }
+};
+
 export function DockLayout({ blocks }: DockLayoutProps) {
-  const [layout, setLayout] = useState<DockLayoutState>(() => createDefaultDockState(blocks));
-  const [dimensions, setDimensions] = useState<DockDimensions>({ width: 0, height: 0 });
+  const [layout, setLayout] = useState<DockLayoutState>(() => readStoredDockLayout(blocks) ?? createDefaultDockState(blocks));
+  const [dimensions, setDimensions] = useState<DockDimensions | null>(estimateBoardSize);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const latestLayoutRef = useRef(layout);
   const blockMap = useMemo(() => createDockBlockMap(blocks), [blocks]);
-  const resolvedRows = useMemo(() => resolveDockLayout(layout, blocks, dimensions), [blocks, dimensions, layout]);
+  const boardSize = dimensions ?? EMPTY_DOCK_DIMENSIONS;
+  const resolvedRows = useMemo(
+    () => (boardSize.width > 0 && boardSize.height > 0 ? resolveDockLayout(layout, blocks, boardSize) : []),
+    [blocks, boardSize, layout]
+  );
+
+  useEffect(() => {
+    latestLayoutRef.current = layout;
+    const saveTimer = window.setTimeout(() => saveDockLayout(layout), 120);
+    return () => window.clearTimeout(saveTimer);
+  }, [layout]);
+
+  useEffect(() => {
+    const flushLayout = () => saveDockLayout(latestLayoutRef.current);
+    window.addEventListener('beforeunload', flushLayout);
+    return () => {
+      window.removeEventListener('beforeunload', flushLayout);
+      flushLayout();
+    };
+  }, []);
 
   useEffect(() => {
     dragRef.current = drag;
   }, [drag]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = boardRef.current;
     if (!node) {
       return;
     }
 
+    const commitSize = (width: number, height: number) => {
+      if (width <= 0 || height <= 0) {
+        return;
+      }
+
+      setDimensions((current) => (sameBoardSize(current, width, height) ? current : { width, height }));
+    };
+
+    commitSize(node.clientWidth, node.clientHeight);
+
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setDimensions({ width, height });
+      commitSize(width, height);
     });
     observer.observe(node);
     return () => observer.disconnect();
@@ -83,7 +215,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
     }
 
     const updateTarget = (clientX: number, clientY: number) => {
-      const target = targetFromPoint(clientX, clientY, drag.blockId, layout, blocks, dimensions);
+      const target = targetFromPoint(clientX, clientY, drag.blockId, layout, blocks, boardSize);
       setDrag((current) => (current ? { ...current, target } : current));
     };
 
@@ -100,7 +232,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [blocks, dimensions, drag, layout]);
+  }, [blocks, boardSize, drag, layout]);
 
   useEffect(() => {
     if (!resize) {
@@ -190,7 +322,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
   };
 
   const openBlock = (blockId: DockBlockId) => {
-    const target = defaultTargetForBlock(blockId, layout, blocks, dimensions);
+    const target = defaultTargetForBlock(blockId, layout, blocks, boardSize);
     if (!target) {
       return;
     }
@@ -215,7 +347,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
           <div className="dock-menu-list">
             {blocks.map((block) => {
               const open = isBlockOpen(layout, block.id);
-              const disabled = !open && defaultTargetForBlock(block.id, layout, blocks, dimensions) === null;
+              const disabled = !open && defaultTargetForBlock(block.id, layout, blocks, boardSize) === null;
 
               return (
                 <button type="button" key={block.id} disabled={disabled} onClick={() => toggleBlock(block.id)}>
