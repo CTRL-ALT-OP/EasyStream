@@ -1,39 +1,12 @@
+export type { CameraLook, CropRect, LayoutPresetId, LightingPreset, PtzPreset } from '../shared/settings';
+import type { LayoutPresetId } from '../shared/settings';
+
+export type CameraSource =
+  | { kind: 'still'; url: string }
+  | { kind: 'video'; url: string }
+  | { kind: 'camera'; deviceId: string };
+
 export type FeedKind = 'wide' | 'ptz';
-
-export type CropRect = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-export type PtzPreset = {
-  id: string;
-  label: string;
-  crop: CropRect;
-};
-
-export type CameraLook = {
-  brightness: number;
-  contrast: number;
-  saturation: number;
-  warmth: number;
-};
-
-export type LightingPreset = {
-  id: string;
-  label: string;
-  description: string;
-  look: CameraLook;
-};
-
-export type LayoutPresetId =
-  | 'ptz-full'
-  | 'media-full'
-  | 'media-portrait-right'
-  | 'media-portrait-tight'
-  | 'media-camera-below'
-  | 'media-camera-above';
 
 export type LayoutPreset = {
   id: LayoutPresetId;
@@ -45,6 +18,5 @@ export type MediaMode = 'slides' | 'video';
 export type MediaState = {
   mode: MediaMode;
   isPlaying: boolean;
-  progress: number;
   slideIndex: number;
 };

@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { panCrop, zoomCrop } from '../lib/crop';
+import { getSessionState, setCrop, subscribeSession } from '../lib/session';
 import type { CropRect } from '../types';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
@@ -21,9 +22,6 @@ type PtzMotionContextValue = {
 };
 
 type PtzMotionProviderProps = {
-  crop: CropRect;
-  speed: number;
-  onCropChange: (crop: CropRect) => void;
   children: React.ReactNode;
 };
 
@@ -56,10 +54,9 @@ const TAP_WINDOW_MS = 170;
 const ZOOM_TAP = 0.18;
 const ZOOM_HOLD_RATE = 0.9;
 
-export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMotionProviderProps) {
-  const cropRef = useRef(crop);
-  const onCropChangeRef = useRef(onCropChange);
-  const speedRef = useRef(speed);
+export function PtzMotionProvider({ children }: PtzMotionProviderProps) {
+  const cropRef = useRef(getSessionState().crop);
+  const speedRef = useRef(getSessionState().panZoomSpeed);
   const pointerCounts = useRef<Record<Direction, number>>({ up: 0, down: 0, left: 0, right: 0 });
   const pointerDirections = useRef(new Map<number, Direction>());
   const keys = useRef(new Set<Direction>());
@@ -78,9 +75,12 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
   const beginZoomRef = useRef<() => void>(() => undefined);
   const finishZoomRef = useRef<(direction: ZoomDirection) => void>(() => undefined);
 
-  cropRef.current = crop;
-  onCropChangeRef.current = onCropChange;
-  speedRef.current = speed;
+  useEffect(() => {
+    return subscribeSession(() => {
+      cropRef.current = getSessionState().crop;
+      speedRef.current = getSessionState().panZoomSpeed;
+    });
+  }, []);
 
   const directionActive = (direction: Direction) => pointerCounts.current[direction] > 0 || keys.current.has(direction);
 
@@ -92,43 +92,29 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
     document.body.classList.toggle('ptz-nudging', next.length > 0 || nextZoom.length > 0);
   };
 
-  const panBy = (dx: number, dy: number) => {
-    const next = panCrop(cropRef.current, dx, dy);
+  const publishCrop = (next: CropRect) => {
     cropRef.current = next;
-    onCropChangeRef.current(next);
+    setCrop(next);
+  };
+
+  const panBy = (dx: number, dy: number) => {
+    publishCrop(panCrop(cropRef.current, dx, dy));
   };
 
   const zoomBy = (scale: number) => {
-    const next = zoomCrop(cropRef.current, scale);
-    cropRef.current = next;
-    onCropChangeRef.current(next);
-  };
-
-  const stepZoom = (dt: number) => {
-    let direction = 0;
-    if (zoomKeys.current.has('out')) {
-      direction += 1;
-    }
-    if (zoomKeys.current.has('in')) {
-      direction -= 1;
-    }
-    if (direction === 0) {
-      return;
-    }
-
-    const rate = ZOOM_HOLD_RATE * speedRef.current * dt;
-    zoomBy(direction > 0 ? 1 + rate : Math.max(0.5, 1 - rate));
-    zoomMoved.current += rate;
+    publishCrop(zoomCrop(cropRef.current, scale));
   };
 
   const stopLoop = () => {
     if (frame.current !== null) {
-      window.clearInterval(frame.current);
+      window.cancelAnimationFrame(frame.current);
       frame.current = null;
     }
   };
 
-  const stepHeld = (dt: number) => {
+  const stepFrame = (dt: number) => {
+    let next = cropRef.current;
+    let changed = false;
     let x = 0;
     let y = 0;
     for (const direction of DIRECTIONS) {
@@ -141,15 +127,32 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
       y += dy;
     }
 
-    if (x === 0 && y === 0) {
-      return;
+    if (x !== 0 || y !== 0) {
+      const length = Math.hypot(x, y);
+      const distance = HOLD_SPEED * speedRef.current * dt;
+      next = panCrop(next, (x / length) * next.width * distance, (y / length) * next.height * distance);
+      moved.current += distance;
+      changed = true;
     }
 
-    const length = Math.hypot(x, y);
-    const current = cropRef.current;
-    const distance = HOLD_SPEED * speedRef.current * dt;
-    panBy((x / length) * current.width * distance, (y / length) * current.height * distance);
-    moved.current += distance;
+    let zoomDirection = 0;
+    if (zoomKeys.current.has('out')) {
+      zoomDirection += 1;
+    }
+    if (zoomKeys.current.has('in')) {
+      zoomDirection -= 1;
+    }
+
+    if (zoomDirection !== 0) {
+      const rate = ZOOM_HOLD_RATE * speedRef.current * dt;
+      next = zoomCrop(next, zoomDirection > 0 ? 1 + rate : Math.max(0.5, 1 - rate));
+      zoomMoved.current += rate;
+      changed = true;
+    }
+
+    if (changed) {
+      publishCrop(next);
+    }
   };
 
   const ensureLoop = () => {
@@ -158,13 +161,13 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
     }
 
     let last = performance.now();
-    frame.current = window.setInterval(() => {
-      const now = performance.now();
+    const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      stepHeld(dt);
-      stepZoom(dt);
-    }, 32);
+      stepFrame(dt);
+      frame.current = window.requestAnimationFrame(tick);
+    };
+    frame.current = window.requestAnimationFrame(tick);
   };
 
   const finishGestureIfIdle = (direction: Direction) => {
@@ -355,7 +358,7 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
     };
   }, []);
 
-  const bindDirection = (direction: Direction) => ({
+  const bindDirection = useCallback((direction: Direction) => ({
     type: 'button' as const,
     className: held.includes(direction) ? 'is-held' : undefined,
     'aria-label':
@@ -372,14 +375,16 @@ export function PtzMotionProvider({ crop, speed, onCropChange, children }: PtzMo
     onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId),
     onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId),
     onLostPointerCapture: (event: React.PointerEvent<HTMLButtonElement>) => releasePointer(event.pointerId)
-  });
+  }), [held]);
 
-  const zoom = (direction: ZoomDirection) => {
+  const zoom = useCallback((direction: ZoomDirection) => {
     const step = ZOOM_TAP * speedRef.current;
     zoomBy(direction === 'out' ? 1 + step : Math.max(0.62, 1 - step));
-  };
+  }, []);
 
-  return <PtzMotionContext.Provider value={{ held, heldZoom, bindDirection, zoom }}>{children}</PtzMotionContext.Provider>;
+  const motion = useMemo(() => ({ held, heldZoom, bindDirection, zoom }), [bindDirection, held, heldZoom, zoom]);
+
+  return <PtzMotionContext.Provider value={motion}>{children}</PtzMotionContext.Provider>;
 }
 
 export function usePtzMotion() {

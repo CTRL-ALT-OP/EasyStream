@@ -26,8 +26,6 @@
 }
 
 body {
-  min-width: 960px;
-  min-height: 640px;
   margin: 0;
   overflow: hidden;
   background: var(--bg);
@@ -195,7 +193,7 @@ main.dock-shell {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .dock-panel > * {
@@ -242,8 +240,7 @@ main.dock-shell {
   display: none;
 }
 
-.dock-panel .camera-hints,
-.dock-panel .panel-heading .status-pill {
+.dock-panel .camera-hints {
   display: none;
 }
 
@@ -385,9 +382,8 @@ main.dock-shell {
 
 .camera-view {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
   max-width: 100%;
   max-height: 100%;
@@ -397,12 +393,24 @@ main.dock-shell {
   overflow: hidden;
 }
 
-.camera-view .main-feed {
-  flex: 0 1 auto;
-  width: min(100%, calc((100cqh - 48px) * 16 / 9));
+.preview-stage {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-width: 0;
   min-height: 0;
-  align-self: center;
+}
+
+.camera-view .main-feed {
+  width: min(100cqi, calc(100cqh * 16 / 9));
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
   aspect-ratio: 16 / 9;
+  min-width: 0;
+  min-height: 0;
+  justify-self: center;
+  align-self: center;
   border: 0;
   border-radius: var(--radius);
 }
@@ -527,7 +535,8 @@ main.dock-shell {
 }
 
 .frame img,
-.frame video {
+.frame video,
+.frame canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -546,16 +555,18 @@ main.dock-shell {
   pointer-events: none;
 }
 
-.ptz-frame img {
+.ptz-frame img,
+.ptz-frame canvas {
   inset: auto;
   position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   max-width: none;
-  object-fit: cover;
-  transition:
-    left 420ms cubic-bezier(0.2, 0.72, 0.2, 1),
-    top 420ms cubic-bezier(0.2, 0.72, 0.2, 1),
-    width 420ms cubic-bezier(0.2, 0.72, 0.2, 1),
-    height 420ms cubic-bezier(0.2, 0.72, 0.2, 1);
+  object-fit: fill;
+  transform-origin: 0 0;
+  transition: transform 420ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
 .ptz-lens-vignette,
@@ -625,18 +636,27 @@ main.dock-shell {
 }
 
 .ptz-outline {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   border: 2px solid var(--accent);
   box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.28);
+  transform-origin: 0 0;
   background:
     linear-gradient(to right, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
     linear-gradient(to right, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
     linear-gradient(to bottom, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
     linear-gradient(to bottom, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.72) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px));
-  transition: all 420ms cubic-bezier(0.2, 0.72, 0.2, 1);
+  transition:
+    transform 420ms cubic-bezier(0.2, 0.72, 0.2, 1),
+    border-width 420ms cubic-bezier(0.2, 0.72, 0.2, 1),
+    box-shadow 420ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
 body.ptz-nudging .ptz-outline,
-body.ptz-nudging .ptz-frame img {
+body.ptz-nudging .ptz-frame img,
+body.ptz-nudging .ptz-frame canvas {
   transition: none;
 }
 
@@ -651,8 +671,9 @@ body.ptz-nudging .ptz-frame img {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   gap: 8px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .joystick {
@@ -1106,9 +1127,9 @@ body.ptz-nudging .ptz-frame img {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  grid-template-columns: max-content minmax(180px, 1fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(210px, 1fr);
   gap: 10px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .layout-grid {
@@ -1116,14 +1137,14 @@ body.ptz-nudging .ptz-frame img {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  grid-template-columns: repeat(3, minmax(0, max-content));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .layout-card {
   display: grid;
-  width: min(calc(max(0px, (100cqh - 8px) / 2 - 32px) * 16 / 9 + 12px), calc((100cqw - 206px) / 3));
+  width: 100%;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1199,7 +1220,8 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .composite-media > .frame img,
-.composite-media > .frame video {
+.composite-media > .frame video,
+.composite-media > .frame canvas {
   object-fit: contain;
 }
 
@@ -1251,9 +1273,9 @@ body.ptz-nudging .ptz-frame img {
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: minmax(0, 1fr) repeat(3, auto);
+  grid-template-rows: minmax(96px, 1fr) repeat(3, auto);
   gap: 8px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .output-preview {
@@ -1373,13 +1395,14 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .media-panel {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
   max-width: 100%;
   height: 100%;
   gap: 8px;
-  overflow: visible;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .media-panel .panel-heading h2 {
@@ -1390,7 +1413,6 @@ body.ptz-nudging .ptz-frame img {
 }
 
 .media-stage {
-  container-type: size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1398,6 +1420,16 @@ body.ptz-nudging .ptz-frame img {
   min-width: 0;
   min-height: 0;
   gap: 8px;
+  overflow: auto;
+}
+
+.media-preview-slot {
+  container-type: size;
+  display: grid;
+  flex: 1 1 auto;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
 }
 
 .media-picker {
@@ -1417,6 +1449,11 @@ body.ptz-nudging .ptz-frame img {
 .media-picker.align-left::before {
   right: auto;
   left: 0;
+}
+
+.media-picker.place-up::before {
+  top: auto;
+  bottom: 100%;
 }
 
 .picker-menu {
@@ -1439,6 +1476,11 @@ body.ptz-nudging .ptz-frame img {
 .media-picker.align-left .picker-menu {
   right: auto;
   left: 0;
+}
+
+.media-picker.place-up .picker-menu {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .media-picker:hover .picker-menu,
@@ -1466,12 +1508,13 @@ body.ptz-nudging .ptz-frame img {
 
 .media-preview-shell {
   position: relative;
-  flex: 0 1 auto;
-  width: min(100cqw, calc(max(0px, 100cqh - 48px) * 16 / 9));
+  width: min(100cqi, calc(100cqh * 16 / 9));
+  max-width: 100%;
+  max-height: 100%;
   min-height: 0;
   height: auto;
   aspect-ratio: 16 / 9;
-  max-height: calc(100cqh - 48px);
+  justify-self: center;
   align-self: center;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1484,7 +1527,8 @@ body.ptz-nudging .ptz-frame img {
   height: 100%;
 }
 
-.media-frame img {
+.media-frame img,
+.media-frame canvas {
   object-fit: contain;
 }
 
@@ -1552,7 +1596,19 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
-@media (max-width: 1100px) {
+@container (max-width: 480px) {
+  .streaming-content {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(120px, auto) minmax(220px, 1fr);
+  }
+
+  .layout-grid {
+    height: auto;
+    grid-template-rows: repeat(2, minmax(64px, auto));
+  }
+}
+
+@container (max-width: 420px) {
   .camera-view,
   .streaming-panel,
   .media-panel,

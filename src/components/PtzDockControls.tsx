@@ -1,9 +1,18 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Focus, Gauge, Home, Minus, Plus, SlidersHorizontal, Sun, ZoomIn } from 'lucide-react';
-import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PtzFrame } from './PreviewFrames';
 import { usePtzMotion } from './PtzMotion';
-import type { CameraLook, CropRect, LightingPreset, PtzPreset } from '../types';
+import {
+  recallLightingPreset,
+  recallPreset,
+  saveLightingPreset,
+  savePreset,
+  setCameraLook,
+  setPanZoomSpeed,
+  useSession
+} from '../lib/session';
+import type { CameraLook, CropRect } from '../types';
 
 type PtzDockContextValue = {
   settingPositionPreset: boolean;
@@ -14,26 +23,6 @@ type PtzDockContextValue = {
 
 type PtzDockProviderProps = {
   children: React.ReactNode;
-};
-
-type PtzMainControlsProps = {
-  crop: CropRect;
-  look: CameraLook;
-  presets: PtzPreset[];
-  activePresetId: string | null;
-  onPresetRecall: (preset: PtzPreset) => void;
-  onPresetSave: (presetId: string) => void;
-};
-
-type PtzLightingControlsProps = {
-  look: CameraLook;
-  speed: number;
-  lightingPresets: LightingPreset[];
-  activeLightingPresetId: string | null;
-  onLookChange: (look: CameraLook) => void;
-  onSpeedChange: (speed: number) => void;
-  onLightingPresetRecall: (preset: LightingPreset) => void;
-  onLightingPresetSave: (presetId: string) => void;
 };
 
 type LightingField = keyof CameraLook;
@@ -176,28 +165,31 @@ export function PtzDockProvider({ children }: PtzDockProviderProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [settingAnyPreset]);
 
-  return (
-    <PtzDockContext.Provider
-      value={{
-        settingPositionPreset,
-        settingLightingPreset,
-        setPositionPresetMode: (enabled) => {
-          setSettingPositionPreset(enabled);
-          if (enabled) {
-            setSettingLightingPreset(false);
-          }
-        },
-        setLightingPresetMode: (enabled) => {
-          setSettingLightingPreset(enabled);
-          if (enabled) {
-            setSettingPositionPreset(false);
-          }
-        }
-      }}
-    >
-      {children}
-    </PtzDockContext.Provider>
+  const setPositionPresetMode = useCallback((enabled: boolean) => {
+    setSettingPositionPreset(enabled);
+    if (enabled) {
+      setSettingLightingPreset(false);
+    }
+  }, []);
+
+  const setLightingPresetMode = useCallback((enabled: boolean) => {
+    setSettingLightingPreset(enabled);
+    if (enabled) {
+      setSettingPositionPreset(false);
+    }
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      settingPositionPreset,
+      settingLightingPreset,
+      setPositionPresetMode,
+      setLightingPresetMode
+    }),
+    [setLightingPresetMode, setPositionPresetMode, settingLightingPreset, settingPositionPreset]
   );
+
+  return <PtzDockContext.Provider value={value}>{children}</PtzDockContext.Provider>;
 }
 
 function usePtzDockContext() {
@@ -362,9 +354,17 @@ function PagedPresetList<TPreset extends PresetLike>({
   );
 }
 
-export function PtzMainControls({ crop, look, presets, activePresetId, onPresetRecall, onPresetSave }: PtzMainControlsProps) {
+function ZoomReadout() {
+  const width = useSession((current) => current.crop.width);
+  return <span>{Math.round(10000 / width)}%</span>;
+}
+
+export function PtzMainControls() {
   const { settingPositionPreset, setPositionPresetMode } = usePtzDockContext();
   const { heldZoom, bindDirection, zoom } = usePtzMotion();
+  const presets = useSession((current) => current.presets);
+  const look = useSession((current) => current.cameraLook);
+  const activePresetId = useSession((current) => current.activePresetId);
   const positionPresetListRef = useRef<HTMLDivElement>(null);
   const presetCutout = usePresetCutout(settingPositionPreset, positionPresetListRef);
 
@@ -382,7 +382,7 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
         <button {...bindDirection('left')}>
           <ArrowLeft size={18} />
         </button>
-        <button className="home-button" type="button" onClick={() => onPresetRecall(presets[0])} aria-label="Recall stage wide">
+        <button className="home-button" type="button" onClick={() => recallPreset(presets[0])} aria-label="Recall stage wide">
           <Home size={18} />
         </button>
         <button {...bindDirection('right')}>
@@ -400,7 +400,9 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
         </button>
         <div className="zoom-meter">
           <ZoomIn size={16} />
-          <span>{Math.round(10000 / crop.width)}%</span>
+          <span>
+            <ZoomReadout />
+          </span>
         </div>
         <button type="button" className={heldZoom.includes('in') ? 'is-held' : undefined} onClick={() => zoom('in')} aria-label="Zoom in (E)">
           <Plus size={16} />
@@ -427,12 +429,12 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
             className={`preset-button position-preset-card ${activePresetId === preset.id ? 'active' : ''}`}
             onClick={() => {
               if (settingPositionPreset) {
-                onPresetSave(preset.id);
+                savePreset(preset.id);
                 setPositionPresetMode(false);
                 return;
               }
 
-              onPresetRecall(preset);
+              recallPreset(preset);
             }}
           >
             <div className="preset-preview">
@@ -448,22 +450,17 @@ export function PtzMainControls({ crop, look, presets, activePresetId, onPresetR
   );
 }
 
-export function PtzLightingControls({
-  look,
-  speed,
-  lightingPresets,
-  activeLightingPresetId,
-  onLookChange,
-  onSpeedChange,
-  onLightingPresetRecall,
-  onLightingPresetSave
-}: PtzLightingControlsProps) {
+export function PtzLightingControls() {
   const { settingLightingPreset, setLightingPresetMode } = usePtzDockContext();
+  const look = useSession((current) => current.cameraLook);
+  const speed = useSession((current) => current.panZoomSpeed);
+  const lightingPresets = useSession((current) => current.lightingPresets);
+  const activeLightingPresetId = useSession((current) => current.activeLightingPresetId);
   const lightingPresetListRef = useRef<HTMLDivElement>(null);
   const presetCutout = usePresetCutout(settingLightingPreset, lightingPresetListRef);
 
   const updateLook = (field: LightingField, value: number) => {
-    onLookChange({ ...look, [field]: value });
+    setCameraLook({ ...look, [field]: value });
   };
 
   const lightingControls: Array<{ field: LightingField; label: string; min: number; max: number; step: number; valueLabel: string }> = [
@@ -490,7 +487,7 @@ export function PtzLightingControls({
             <span>Speed</span>
             <strong>{speed.toFixed(1)}x</strong>
           </span>
-          <input type="range" min={0.6} max={1.6} step={0.1} value={speed} onChange={(event) => onSpeedChange(Number(event.target.value))} />
+          <input type="range" min={0.6} max={1.6} step={0.1} value={speed} onChange={(event) => setPanZoomSpeed(Number(event.target.value))} />
         </label>
       </div>
 
@@ -533,12 +530,12 @@ export function PtzLightingControls({
             className={`preset-button ${activeLightingPresetId === preset.id ? 'active' : ''}`}
             onClick={() => {
               if (settingLightingPreset) {
-                onLightingPresetSave(preset.id);
+                saveLightingPreset(preset.id);
                 setLightingPresetMode(false);
                 return;
               }
 
-              onLightingPresetRecall(preset);
+              recallLightingPreset(preset);
             }}
           >
             <span>{preset.label}</span>

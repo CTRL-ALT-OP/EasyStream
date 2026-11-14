@@ -70,6 +70,25 @@ export function cropFromSelection(a: CropPoint, b: CropPoint): CropRect {
   });
 }
 
+/** Maps a source crop onto a view box with origin at the top left. Percentages match the previous left/top/width/height placement. */
+export function cropPlacement(frame: CropRect) {
+  const width = frame.width || 1;
+  const height = frame.height || 1;
+  const scaleX = 100 / width;
+  const scaleY = 100 / height;
+  return {
+    scaleX,
+    scaleY,
+    translateX: -frame.x * scaleX,
+    translateY: -frame.y * scaleY
+  };
+}
+
+export function cropTransform(frame: CropRect) {
+  const placement = cropPlacement(frame);
+  return `translate3d(${placement.translateX}%, ${placement.translateY}%, 0) scale(${placement.scaleX}, ${placement.scaleY})`;
+}
+
 /** Centered 9:16 cut of a 16:9 crop. Tightness below 1 zooms that cut in. */
 export function portraitWindow(crop: CropRect, tightness = 1): CropRect {
   const current = fitCrop(crop);

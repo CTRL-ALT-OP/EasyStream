@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-
 export type DockBlockId = 'preview' | 'ptz' | 'lighting' | 'output' | 'media';
 
 export type DockBlockDefinition = {
@@ -10,7 +8,6 @@ export type DockBlockDefinition = {
   minHeight: number;
   defaultRow: number;
   defaultIndex: number;
-  content: ReactNode;
 };
 
 export type DockCell = {

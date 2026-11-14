@@ -1,11 +1,12 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseSettingsDocument, type AppSettingsDocument } from '../shared/settings';
 
 const DEFAULT_WINDOW_WIDTH = 1440;
 const DEFAULT_WINDOW_HEIGHT = 980;
-const MIN_WINDOW_WIDTH = 1180;
-const MIN_WINDOW_HEIGHT = 820;
+const MIN_WINDOW_WIDTH = 960;
+const MIN_WINDOW_HEIGHT = 720;
 const WINDOW_STATE_SAVE_DELAY_MS = 150;
 
 type SavedWindowState = {
@@ -76,6 +77,30 @@ const flushWindowStateSave = (window: BrowserWindow): void => {
   saveWindowState(window);
 };
 
+const settingsPath = () => join(app.getPath('userData'), 'app-settings.json');
+
+const readSettingsDocument = (): AppSettingsDocument | null => {
+  try {
+    return parseSettingsDocument(JSON.parse(readFileSync(settingsPath(), 'utf8')));
+  } catch {
+    return null;
+  }
+};
+
+const writeSettingsDocument = (value: unknown): boolean => {
+  const document = parseSettingsDocument(value);
+  if (!document) {
+    return false;
+  }
+
+  try {
+    writeFileSync(settingsPath(), JSON.stringify(document, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const createWindow = (): void => {
   const savedWindowState = readSavedWindowState();
   const window = new BrowserWindow({
@@ -83,7 +108,7 @@ const createWindow = (): void => {
     height: savedWindowState.height,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
-    title: 'EasyStream Demo',
+    title: 'EasyStream',
     backgroundColor: '#141414',
     show: false,
     autoHideMenuBar: true,
@@ -120,6 +145,8 @@ const createWindow = (): void => {
 };
 
 app.whenReady().then(() => {
+  ipcMain.handle('settings:load', () => readSettingsDocument());
+  ipcMain.handle('settings:save', (_event, value: unknown) => writeSettingsDocument(value));
   createWindow();
 
   app.on('activate', () => {

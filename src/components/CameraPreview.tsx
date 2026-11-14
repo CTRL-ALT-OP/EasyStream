@@ -1,20 +1,42 @@
 import { Camera, Maximize2, MousePointer2 } from 'lucide-react';
 import { useState } from 'react';
-import { centerCropAt, cropFromSelection, type CropPoint } from '../lib/crop';
+import { centerCropAt, cropFromSelection, fitCrop, type CropPoint } from '../lib/crop';
+import { getSessionState, setCrop, setMainFeed, useSession } from '../lib/session';
 import { PtzFrame, WideFrame } from './PreviewFrames';
-import type { CameraLook, CropRect, FeedKind } from '../types';
-
-type CameraPreviewProps = {
-  crop: CropRect;
-  cameraLook: CameraLook;
-  mainFeed: FeedKind;
-  onCropChange: (crop: CropRect) => void;
-  onMainFeedChange: (feed: FeedKind) => void;
-};
+import type { FeedKind } from '../types';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-export function CameraPreview({ crop, cameraLook, mainFeed, onCropChange, onMainFeedChange }: CameraPreviewProps) {
+function SubscribedPtzFrame({ downsampled = false }: { downsampled?: boolean }) {
+  const crop = useSession((current) => current.crop);
+  const look = useSession((current) => current.cameraLook);
+  return <PtzFrame crop={crop} look={look} downsampled={downsampled} />;
+}
+
+function CropOutline() {
+  const crop = useSession((current) => current.crop);
+  const fitted = fitCrop(crop);
+  const scaleX = fitted.width / 100;
+  const scaleY = fitted.height / 100;
+  const borderScale = (scaleX + scaleY) / 2 || 1;
+
+  return (
+    <div
+      className="ptz-outline"
+      style={{
+        transform: `translate3d(${fitted.x}%, ${fitted.y}%, 0) scale(${scaleX}, ${scaleY})`,
+        borderTopWidth: `${2 / scaleY}px`,
+        borderRightWidth: `${2 / scaleX}px`,
+        borderBottomWidth: `${2 / scaleY}px`,
+        borderLeftWidth: `${2 / scaleX}px`,
+        boxShadow: `0 0 0 ${999 / borderScale}px rgba(0, 0, 0, 0.28)`
+      }}
+    />
+  );
+}
+
+export function CameraPreview() {
+  const mainFeed = useSession((current) => current.mainFeed);
   const [dragStart, setDragStart] = useState<CropPoint | null>(null);
   const [dragCurrent, setDragCurrent] = useState<CropPoint | null>(null);
   const pipFeed: FeedKind = mainFeed === 'wide' ? 'ptz' : 'wide';
@@ -32,6 +54,7 @@ export function CameraPreview({ crop, cameraLook, mainFeed, onCropChange, onMain
       return point;
     }
 
+    const crop = getSessionState().crop;
     return {
       x: crop.x + (point.x / 100) * crop.width,
       y: crop.y + (point.y / 100) * crop.height
@@ -66,9 +89,9 @@ export function CameraPreview({ crop, cameraLook, mainFeed, onCropChange, onMain
     const distance = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
 
     if (distance < 2.4) {
-      onCropChange(centerCropAt(crop, imagePointFromViewPoint(end)));
+      setCrop(centerCropAt(getSessionState().crop, imagePointFromViewPoint(end)));
     } else {
-      onCropChange(cropFromSelection(imagePointFromViewPoint(dragStart), imagePointFromViewPoint(end)));
+      setCrop(cropFromSelection(imagePointFromViewPoint(dragStart), imagePointFromViewPoint(end)));
     }
 
     setDragStart(null);
@@ -100,53 +123,44 @@ export function CameraPreview({ crop, cameraLook, mainFeed, onCropChange, onMain
           </span>
         </div>
       </div>
-      <div
-        className={`main-feed ${mainFeed}`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={() => {
-          setDragStart(null);
-          setDragCurrent(null);
-        }}
-      >
-        {mainFeed === 'wide' ? <WideFrame /> : <PtzFrame crop={crop} look={cameraLook} />}
+      <div className="preview-stage">
         <div
-          className="pip-feed"
-          role="button"
-          tabIndex={0}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onMainFeedChange(pipFeed);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onMainFeedChange(pipFeed);
-            }
+          className={`main-feed ${mainFeed}`}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={() => {
+            setDragStart(null);
+            setDragCurrent(null);
           }}
         >
-          <div className="pip-label">
-            <Camera size={14} />
-            {pipFeed === 'wide' ? 'Wide' : 'PTZ'}
-          </div>
-          {pipFeed === 'wide' ? <WideFrame downsampled /> : <PtzFrame crop={crop} look={cameraLook} downsampled />}
-        </div>
-
-        {mainFeed === 'wide' && (
+          {mainFeed === 'wide' ? <WideFrame /> : <SubscribedPtzFrame />}
           <div
-            className="ptz-outline"
-            style={{
-              left: `${crop.x}%`,
-              top: `${crop.y}%`,
-              width: `${crop.width}%`,
-              height: `${crop.height}%`
+            className="pip-feed"
+            role="button"
+            tabIndex={0}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setMainFeed(pipFeed);
             }}
-          />
-        )}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setMainFeed(pipFeed);
+              }
+            }}
+          >
+            <div className="pip-label">
+              <Camera size={14} />
+              {pipFeed === 'wide' ? 'Wide' : 'PTZ'}
+            </div>
+            {pipFeed === 'wide' ? <WideFrame downsampled /> : <SubscribedPtzFrame downsampled />}
+          </div>
 
-        {selectionStyle && <div className="selection-rect" style={selectionStyle} />}
+          {mainFeed === 'wide' && <CropOutline />}
+          {selectionStyle && <div className="selection-rect" style={selectionStyle} />}
+        </div>
       </div>
     </section>
   );

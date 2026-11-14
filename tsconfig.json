@@ -17,6 +17,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["electron", "src", "electron.vite.config.ts"],
+  "include": ["electron", "src", "shared", "electron.vite.config.ts"],
   "references": []
 }

@@ -1,47 +1,36 @@
 import { Radio, Settings, Square, Video } from 'lucide-react';
 import { memo, useState } from 'react';
+import { layoutPresets } from '../demo/presets';
+import { setActiveLayout, setRecording, setStreaming, useSession } from '../lib/session';
+import type { LayoutPreset } from '../types';
 import { MediaFrame, PtzFrame } from './PreviewFrames';
-import type { CameraLook, CropRect, LayoutPreset, LayoutPresetId, MediaState } from '../types';
 
-type StreamingControlsProps = {
-  crop: CropRect;
-  cameraLook: CameraLook;
-  media: MediaState;
-  layouts: LayoutPreset[];
-  activeLayout: LayoutPresetId;
-  isStreaming: boolean;
-  isRecording: boolean;
-  onLayoutChange: (layout: LayoutPresetId) => void;
-  onStreamingChange: (isStreaming: boolean) => void;
-  onRecordingChange: (isRecording: boolean) => void;
-};
+function MediaOnlyFrame({ preview = false }: { preview?: boolean }) {
+  const media = useSession((current) => current.media);
+  return <MediaFrame mode={media.mode} slideIndex={media.slideIndex} downsampled={preview} />;
+}
 
-const LayoutComposite = memo(function LayoutComposite({
-  layout,
-  crop,
-  cameraLook,
-  media,
-  preview = false
-}: {
-  layout: LayoutPreset;
-  crop: CropRect;
-  cameraLook: CameraLook;
-  media: MediaState;
-  preview?: boolean;
-}) {
-  if (layout.id === 'ptz-full') {
-    return <PtzFrame crop={crop} look={cameraLook} downsampled={preview} />;
+const LayoutComposite = memo(function LayoutComposite({ layout, preview = false }: { layout: LayoutPreset; preview?: boolean }) {
+  if (layout.id === 'media-full') {
+    return <MediaOnlyFrame preview={preview} />;
   }
 
-  if (layout.id === 'media-full') {
-    return <MediaFrame media={media} downsampled={preview} />;
+  return <CameraLayoutComposite layout={layout} preview={preview} />;
+});
+
+const CameraLayoutComposite = memo(function CameraLayoutComposite({ layout, preview = false }: { layout: LayoutPreset; preview?: boolean }) {
+  const crop = useSession((current) => current.crop);
+  const cameraLook = useSession((current) => current.cameraLook);
+  const media = useSession((current) => current.media);
+  if (layout.id === 'ptz-full') {
+    return <PtzFrame crop={crop} look={cameraLook} downsampled={preview} />;
   }
 
   if (layout.id === 'media-camera-below' || layout.id === 'media-camera-above') {
     const cameraAbove = layout.id === 'media-camera-above';
     const mediaFrame = (
       <div className="composite-media">
-        <MediaFrame media={media} downsampled={preview} />
+        <MediaFrame mode={media.mode} slideIndex={media.slideIndex} downsampled={preview} />
       </div>
     );
     const cameraFrame = (
@@ -61,7 +50,7 @@ const LayoutComposite = memo(function LayoutComposite({
   return (
     <div className="composite-layout">
       <div className="composite-media">
-        <MediaFrame media={media} downsampled={preview} />
+        <MediaFrame mode={media.mode} slideIndex={media.slideIndex} downsampled={preview} />
       </div>
       <div className="portrait-slot">
         <PtzFrame crop={crop} look={cameraLook} portrait tight={layout.id === 'media-portrait-tight'} downsampled={preview} />
@@ -70,20 +59,12 @@ const LayoutComposite = memo(function LayoutComposite({
   );
 });
 
-export function StreamingControls({
-  crop,
-  cameraLook,
-  media,
-  layouts,
-  activeLayout,
-  isStreaming,
-  isRecording,
-  onLayoutChange,
-  onStreamingChange,
-  onRecordingChange
-}: StreamingControlsProps) {
+export function StreamingControls() {
+  const activeLayout = useSession((current) => current.activeLayout);
+  const isStreaming = useSession((current) => current.isStreaming);
+  const isRecording = useSession((current) => current.isRecording);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
+  const layouts = layoutPresets;
   const activeLayoutMeta = layouts.find((layout) => layout.id === activeLayout) ?? layouts[0];
 
   return (
@@ -99,11 +80,11 @@ export function StreamingControls({
             <button
               className={`layout-card ${activeLayout === layout.id ? 'active' : ''}`}
               key={layout.id}
-              onClick={() => onLayoutChange(layout.id)}
+              onClick={() => setActiveLayout(layout.id)}
             >
               <div className="layout-preview ratio-slot">
                 <div className="ratio-16x9">
-                  <LayoutComposite layout={layout} crop={crop} cameraLook={cameraLook} media={media} preview />
+                  <LayoutComposite layout={layout} preview />
                 </div>
               </div>
               <span className="layout-label">{layout.label}</span>
@@ -119,16 +100,16 @@ export function StreamingControls({
             </div>
             <div className="ratio-slot">
               <div className="ratio-16x9">
-                <LayoutComposite layout={activeLayoutMeta} crop={crop} cameraLook={cameraLook} media={media} />
+                <LayoutComposite layout={activeLayoutMeta} />
               </div>
             </div>
           </div>
 
-          <button className={`action-button primary ${isStreaming ? 'danger' : ''}`} onClick={() => onStreamingChange(!isStreaming)}>
+          <button className={`action-button primary ${isStreaming ? 'danger' : ''}`} onClick={() => setStreaming(!isStreaming)}>
             <Radio size={18} />
             {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
           </button>
-          <button className={`action-button ${isRecording ? 'recording' : ''}`} onClick={() => onRecordingChange(!isRecording)}>
+          <button className={`action-button ${isRecording ? 'recording' : ''}`} onClick={() => setRecording(!isRecording)}>
             {isRecording ? <Square size={18} /> : <Video size={18} />}
             {isRecording ? 'Stop Recording' : 'Start Recording'}
           </button>

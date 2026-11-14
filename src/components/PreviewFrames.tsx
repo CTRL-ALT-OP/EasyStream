@@ -1,7 +1,10 @@
-import { createContext, memo, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { demoAssets } from '../demo/assets';
-import { fitCrop, portraitWindow, TIGHT_PORTRAIT_SCALE } from '../lib/crop';
-import type { CameraLook, CropRect, MediaState } from '../types';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { cropTransform, fitCrop, portraitWindow, TIGHT_PORTRAIT_SCALE } from '../lib/crop';
+import { loadDownsampledStill } from '../lib/stillCache';
+import { getSessionState, setPlaybackDuration, setPlaybackProgress, subscribeSession } from '../lib/session';
+import { attachVideo, drawVideoFrame, registerVideoSink, startVideoLoop, stopVideoLoop } from '../lib/videoFrames';
+import { demoSlides, demoVideoSource, ptzCameraSource, wideCameraSource } from '../sources';
+import type { CameraLook, CameraSource, CropRect, MediaMode } from '../types';
 
 type PtzFrameProps = {
   crop: CropRect;
@@ -13,354 +16,257 @@ type PtzFrameProps = {
 };
 
 type MediaFrameProps = {
-  media: MediaState;
+  mode: MediaMode;
+  slideIndex: number;
   className?: string;
   downsampled?: boolean;
 };
 
-type FeedProjectionProviderProps = {
-  media: MediaState;
-  onPlaybackProgress?: (progress: number) => void;
-  children: ReactNode;
+const THUMBNAIL_WIDTH = 320;
+let echoedProgress: number | null = null;
+
+const publishPlaybackProgress = (progress: number) => {
+  if (Object.is(getSessionState().playbackProgress, progress)) {
+    return;
+  }
+
+  echoedProgress = progress;
+  setPlaybackProgress(progress);
 };
 
-type MediaPlaybackValue = {
-  videoFrameSrc: string | null;
-  videoPreviewSrc: string | null;
-  videoPosterSrc: string | null;
-  duration: number;
+const isEchoedProgress = (progress: number) => {
+  if (echoedProgress !== null && Math.abs(progress - echoedProgress) < 0.5) {
+    echoedProgress = null;
+    return true;
+  }
+
+  return false;
 };
 
-type CachedProjection = {
-  src?: string;
-  promise?: Promise<string>;
-  listeners: Set<() => void>;
-};
-
-const projectionCache = new Map<string, CachedProjection>();
-const mediaPlaybackContext = createContext<MediaPlaybackValue>({
-  videoFrameSrc: null,
-  videoPreviewSrc: null,
-  videoPosterSrc: null,
-  duration: 0
-});
-
-const wideCameraSource = demoAssets.auditorium;
-// Simulated separately so the eventual PTZ camera stream can replace this source without changing consumers.
-const ptzCameraSource = demoAssets.auditorium;
-const videoFrameWidth = 960;
-const previewFrameWidth = 320;
-const ptzPreviewHeight = 144;
-const ptzPreviewWidth = Math.round((16 / 9) * ptzPreviewHeight);
-const ptzPreviewPortraitWidth = Math.round((9 / 16) * ptzPreviewHeight);
-
-const projectionKey = (parts: Array<string | number | boolean | undefined>) => parts.map((part) => String(part)).join('|');
-
-function useCachedProjection(key: string, fallbackSrc: string, createProjection: () => Promise<string>, enabled = true) {
-  const [, setVersion] = useState(0);
-  const createRef = useRef(createProjection);
-  createRef.current = createProjection;
+function StillPicture({ url, downsampled = false, alt, style }: { url: string; downsampled?: boolean; alt: string; style?: CSSProperties }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!downsampled) {
       return;
     }
 
-    let entry = projectionCache.get(key);
-    if (!entry) {
-      entry = { listeners: new Set() };
-      projectionCache.set(key, entry);
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
     }
 
-    const notify = () => setVersion((version) => version + 1);
-    entry.listeners.add(notify);
+    let cancelled = false;
+    void loadDownsampledStill(url, THUMBNAIL_WIDTH)
+      .then((bitmap) => {
+        if (cancelled) {
+          return;
+        }
 
-    if (!entry.src && !entry.promise) {
-      entry.promise = createRef
-        .current()
-        .then((src) => {
-          entry!.src = src;
-          entry!.promise = undefined;
-          entry!.listeners.forEach((listener) => listener());
-          return src;
-        })
-        .catch(() => {
-          entry!.promise = undefined;
-          return fallbackSrc;
-        });
-    }
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+      })
+      .catch(() => undefined);
 
     return () => {
-      entry!.listeners.delete(notify);
+      cancelled = true;
     };
-  }, [enabled, fallbackSrc, key]);
+  }, [downsampled, url]);
 
-  return enabled ? projectionCache.get(key)?.src ?? fallbackSrc : fallbackSrc;
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Unable to load image projection source: ${src}`));
-    image.src = src;
-  });
-}
-
-function canvasToImage(canvas: HTMLCanvasElement) {
-  return canvas.toDataURL('image/jpeg', 0.82);
-}
-
-async function renderDownsampledImage(src: string, maxWidth = previewFrameWidth) {
-  const image = await loadImage(src);
-  const width = Math.min(maxWidth, image.naturalWidth || maxWidth);
-  const height = Math.max(1, Math.round(width / ((image.naturalWidth || 16) / (image.naturalHeight || 9))));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width));
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-
-  if (!context) {
-    return src;
+  if (!downsampled) {
+    return <img src={url} alt={alt} style={style} draggable={false} />;
   }
 
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvasToImage(canvas);
+  return <canvas ref={canvasRef} aria-label={alt} style={style} />;
 }
 
-function captureVideoFrame(video: HTMLVideoElement) {
-  if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
-    return null;
+function VideoSurface({ downsampled = false }: { downsampled?: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    return registerVideoSink(canvas, downsampled ? THUMBNAIL_WIDTH : 960);
+  }, [downsampled]);
+
+  return <canvas ref={canvasRef} aria-label="Video frame" />;
+}
+
+function SourcePicture({
+  source,
+  downsampled = false,
+  alt,
+  style
+}: {
+  source: CameraSource;
+  downsampled?: boolean;
+  alt: string;
+  style?: CSSProperties;
+}) {
+  if (source.kind === 'still') {
+    return <StillPicture url={source.url} downsampled={downsampled} alt={alt} style={style} />;
   }
 
-  const aspect = video.videoWidth / video.videoHeight;
-  const fullCanvas = document.createElement('canvas');
-  fullCanvas.width = Math.min(videoFrameWidth, video.videoWidth);
-  fullCanvas.height = Math.max(1, Math.round(fullCanvas.width / aspect));
-  const previewCanvas = document.createElement('canvas');
-  previewCanvas.width = Math.min(previewFrameWidth, video.videoWidth);
-  previewCanvas.height = Math.max(1, Math.round(previewCanvas.width / aspect));
-
-  const fullContext = fullCanvas.getContext('2d');
-  const previewContext = previewCanvas.getContext('2d');
-  if (!fullContext || !previewContext) {
-    return null;
+  if (source.kind === 'video') {
+    return <VideoSurface downsampled={downsampled} />;
   }
 
-  fullContext.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
-  previewContext.drawImage(video, 0, 0, previewCanvas.width, previewCanvas.height);
-
-  return {
-    frame: canvasToImage(fullCanvas),
-    preview: canvasToImage(previewCanvas)
-  };
+  return null;
 }
 
-export function useMediaPlayback() {
-  return useContext(mediaPlaybackContext);
-}
-
-export function FeedProjectionProvider({ media, onPlaybackProgress, children }: FeedProjectionProviderProps) {
+export function FeedProjectionProvider({ children }: { children: ReactNode }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const lastPublishedProgress = useRef<number | null>(null);
-  const [videoFrameSrc, setVideoFrameSrc] = useState<string | null>(null);
-  const [videoPreviewSrc, setVideoPreviewSrc] = useState<string | null>(null);
-  const [videoPosterSrc, setVideoPosterSrc] = useState<string | null>(null);
-  const [duration, setDuration] = useState(0);
-
-  useEffect(() => {
-    if (media.mode !== 'video') {
-      setVideoFrameSrc(null);
-      setVideoPreviewSrc(null);
-      setVideoPosterSrc(null);
-      setDuration(0);
-      lastPublishedProgress.current = null;
-    }
-  }, [media.mode]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || media.mode !== 'video') {
+    if (!video) {
       return;
     }
 
-    const seek = () => {
-      if (!Number.isFinite(video.duration) || video.duration === 0) {
-        return;
-      }
-
-      if (lastPublishedProgress.current !== null && Math.abs(media.progress - lastPublishedProgress.current) < 0.5) {
-        lastPublishedProgress.current = null;
-        return;
-      }
-
-      const target = (media.progress / 100) * video.duration;
-      if (Math.abs(video.currentTime - target) > 0.08) {
-        video.currentTime = target;
-      }
-    };
-
-    seek();
-    video.addEventListener('loadedmetadata', seek);
-    return () => video.removeEventListener('loadedmetadata', seek);
-  }, [media.mode, media.progress]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || media.mode !== 'video') {
-      return;
-    }
-
-    if (media.isPlaying) {
-      void video.play().catch(() => undefined);
-      return;
-    }
-
-    video.pause();
-  }, [media.isPlaying, media.mode]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || media.mode !== 'video') {
-      return;
-    }
+    attachVideo(video);
 
     const publishDuration = () => {
       if (Number.isFinite(video.duration) && video.duration > 0) {
-        setDuration(video.duration);
+        setPlaybackDuration(video.duration);
       }
     };
 
-    const publishProgress = () => {
+    const publishTime = () => {
       if (video.paused || !video.duration) {
         return;
       }
 
-      const progress = (video.currentTime / video.duration) * 100;
-      lastPublishedProgress.current = progress;
-      onPlaybackProgress?.(progress);
+      publishPlaybackProgress((video.currentTime / video.duration) * 100);
+    };
+
+    const draw = () => drawVideoFrame();
+    const pause = () => {
+      stopVideoLoop();
+      drawVideoFrame();
     };
 
     publishDuration();
     video.addEventListener('loadedmetadata', publishDuration);
-    video.addEventListener('timeupdate', publishProgress);
+    video.addEventListener('loadeddata', draw);
+    video.addEventListener('seeked', draw);
+    video.addEventListener('timeupdate', publishTime);
+    video.addEventListener('play', startVideoLoop);
+    video.addEventListener('pause', pause);
+
     return () => {
       video.removeEventListener('loadedmetadata', publishDuration);
-      video.removeEventListener('timeupdate', publishProgress);
+      video.removeEventListener('loadeddata', draw);
+      video.removeEventListener('seeked', draw);
+      video.removeEventListener('timeupdate', publishTime);
+      video.removeEventListener('play', startVideoLoop);
+      video.removeEventListener('pause', pause);
+      stopVideoLoop();
+      attachVideo(null);
     };
-  }, [media.mode, onPlaybackProgress]);
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || media.mode !== 'video') {
-      return;
-    }
+    let seenMedia = getSessionState().media;
+    let seenProgress = getSessionState().playbackProgress;
 
-    let frame = 0;
-    let lastCaptureAt = 0;
-    let lastCaptureTime = -1;
-
-    const publishFrame = (now: number) => {
-      if (now - lastCaptureAt >= 90 && Math.abs(video.currentTime - lastCaptureTime) > 0.015) {
-        const capture = captureVideoFrame(video);
-        if (capture) {
-          setVideoFrameSrc(capture.frame);
-          setVideoPreviewSrc(capture.preview);
-          setVideoPosterSrc((current) => current ?? capture.preview);
-          lastCaptureAt = now;
-          lastCaptureTime = video.currentTime;
-        }
+    return subscribeSession(() => {
+      if (!video) {
+        return;
       }
 
-      frame = window.requestAnimationFrame(publishFrame);
-    };
+      const { media, playbackProgress } = getSessionState();
+      if (media === seenMedia && playbackProgress === seenProgress) {
+        return;
+      }
 
-    frame = window.requestAnimationFrame(publishFrame);
-    return () => window.cancelAnimationFrame(frame);
-  }, [media.mode]);
+      seenMedia = media;
+      seenProgress = playbackProgress;
+
+      if (media.mode !== 'video') {
+        if (!video.paused) {
+          video.pause();
+        }
+        stopVideoLoop();
+        return;
+      }
+
+      if (media.isPlaying) {
+        if (video.paused) {
+          void video.play().catch(() => undefined);
+        }
+      } else if (!video.paused) {
+        video.pause();
+      }
+
+      if (isEchoedProgress(playbackProgress) || !Number.isFinite(video.duration) || video.duration === 0) {
+        return;
+      }
+
+      const target = (playbackProgress / 100) * video.duration;
+      if (Math.abs(video.currentTime - target) > 0.08) {
+        video.currentTime = target;
+      }
+    });
+  }, []);
+
+  const videoUrl = demoVideoSource.kind === 'video' ? demoVideoSource.url : undefined;
 
   return (
-    <mediaPlaybackContext.Provider value={{ videoFrameSrc, videoPreviewSrc, videoPosterSrc, duration }}>
-      {media.mode === 'video' && <video ref={videoRef} className="feed-video-owner" src={demoAssets.video} muted loop playsInline preload="auto" />}
+    <>
+      {videoUrl && <video ref={videoRef} className="feed-video-owner" src={videoUrl} muted loop playsInline preload="auto" />}
       {children}
-    </mediaPlaybackContext.Provider>
+    </>
   );
 }
 
-export const PtzFrame = memo(function PtzFrame({ crop, look, className = '', portrait = false, tight = false, downsampled = false }: PtzFrameProps) {
+export function PtzFrame({ crop, look, className = '', portrait = false, tight = false, downsampled = false }: PtzFrameProps) {
   const frame = portrait ? portraitWindow(crop, tight ? TIGHT_PORTRAIT_SCALE : 1) : fitCrop(crop);
-  const scaleX = 100 / frame.width;
-  const scaleY = portrait ? 100 / frame.height : scaleX;
   const warmth = look?.warmth ?? 0;
-  const tintOpacity = Math.min(Math.abs(warmth) / 100, 0.32);
-  const previewOutputWidth = portrait ? ptzPreviewPortraitWidth : ptzPreviewWidth;
-  const previewSourceWidth = Math.ceil((previewOutputWidth * 100) / frame.width);
-  const projectionSrc = useCachedProjection(
-    projectionKey(['ptz-feed-source', ptzCameraSource, previewSourceWidth]),
-    ptzCameraSource,
-    () => renderDownsampledImage(ptzCameraSource, previewSourceWidth),
-    downsampled
-  );
   const imageStyle: CSSProperties = {
-    width: `${scaleX * 100}%`,
-    height: `${scaleY * 100}%`,
-    left: `${-frame.x * scaleX}%`,
-    top: `${-frame.y * scaleY}%`,
+    transform: cropTransform(frame),
     filter: look ? `brightness(${look.brightness}%) contrast(${look.contrast}%) saturate(${look.saturation}%)` : undefined
   };
   const tintStyle: CSSProperties = {
     background: warmth >= 0 ? 'rgb(255, 168, 72)' : 'rgb(76, 148, 255)',
-    opacity: tintOpacity
+    opacity: Math.min(Math.abs(warmth) / 100, 0.32)
   };
 
   return (
     <div className={`frame ptz-frame ${portrait ? 'portrait-frame' : ''} ${className}`}>
-      <img
-        src={downsampled ? projectionSrc : ptzCameraSource}
-        alt="Simulated PTZ crop"
-        style={imageStyle}
-        draggable={false}
-      />
+      <SourcePicture source={ptzCameraSource} downsampled={downsampled} alt="Simulated PTZ crop" style={imageStyle} />
       <div className="ptz-lighting-tint" style={tintStyle} />
       <div className="ptz-lens-vignette" />
     </div>
   );
-});
+}
 
-export const WideFrame = memo(function WideFrame({ className = '', downsampled = false }: { className?: string; downsampled?: boolean }) {
-  const projectionSrc = useCachedProjection(
-    projectionKey(['wide-feed-source', wideCameraSource]),
-    wideCameraSource,
-    () => renderDownsampledImage(wideCameraSource),
-    downsampled
-  );
-
+export function WideFrame({ className = '', downsampled = false }: { className?: string; downsampled?: boolean }) {
   return (
     <div className={`frame wide-frame ${className}`}>
-      <img src={downsampled ? projectionSrc : wideCameraSource} alt="Simulated wide-angle auditorium feed" draggable={false} />
+      <SourcePicture source={wideCameraSource} downsampled={downsampled} alt="Simulated wide-angle auditorium feed" />
       <div className="wide-grid" />
     </div>
   );
-});
+}
 
-export const MediaFrame = memo(function MediaFrame({ media, className = '', downsampled = false }: MediaFrameProps) {
-  const slide = demoAssets.slides[media.slideIndex % demoAssets.slides.length];
-  const slideProjectionSrc = useCachedProjection(projectionKey(['slide', slide]), slide, () => renderDownsampledImage(slide), downsampled);
-  const { videoFrameSrc, videoPreviewSrc, videoPosterSrc } = useMediaPlayback();
-
-  if (media.mode === 'video') {
-    const src = downsampled ? videoPreviewSrc ?? videoFrameSrc ?? videoPosterSrc : videoFrameSrc ?? videoPreviewSrc ?? videoPosterSrc;
-
+export function MediaFrame({ mode, slideIndex, className = '', downsampled = false }: MediaFrameProps) {
+  if (mode === 'video') {
     return (
       <div className={`frame media-frame video-frame ${className}`}>
-        {src ? <img src={src} alt="Mock video frame" draggable={false} /> : <div className="video-frame-placeholder" />}
+        <VideoSurface downsampled={downsampled} />
       </div>
     );
   }
 
+  const slide = demoSlides[slideIndex % demoSlides.length];
   return (
     <div className={`frame media-frame slide-frame ${className}`}>
-      <img src={downsampled ? slideProjectionSrc : slide} alt={`Mock presentation slide ${media.slideIndex + 1}`} draggable={false} />
+      <StillPicture url={slide} downsampled={downsampled} alt={`Mock presentation slide ${slideIndex + 1}`} />
     </div>
   );
-});
+}

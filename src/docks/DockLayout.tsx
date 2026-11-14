@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { rememberDockLayout } from '../lib/settingsSync';
 import {
   applyDockDrop,
   canApplyDockDrop,
@@ -7,9 +8,11 @@ import {
   isBlockOpen,
   removeBlockFromDockState,
   resolveDockLayout,
-  setDockCellActiveBlock
+  setDockCellActiveBlock,
+  splitterFloor
 } from './layout';
-import type { DockBlockDefinition, DockBlockId, DockDimensions, DockDropTarget, DockLayoutState, DockRow } from './types';
+import { dockPanels } from './panels';
+import type { DockBlockDefinition, DockBlockId, DockDimensions, DockDropTarget, DockLayoutState } from './types';
 
 type DragState = {
   blockId: DockBlockId;
@@ -38,17 +41,16 @@ type ResizeState =
 
 type DockLayoutProps = {
   blocks: DockBlockDefinition[];
+  initialLayout?: DockLayoutState | null;
 };
 
 const interactiveSelector = 'button, input, select, textarea, a, [role="button"], [contenteditable="true"], .dock-close-button';
 const DOCK_HEADER_DRAG_HEIGHT = 42;
-const DOCK_MENU_BAR_HEIGHT = 32;
-const DOCK_LAYOUT_STORAGE_KEY = 'easystream.dockLayout.v1';
 const EMPTY_DOCK_DIMENSIONS: DockDimensions = { width: 0, height: 0 };
 
 const estimateBoardSize = (): DockDimensions | null => {
   const width = window.innerWidth;
-  const height = window.innerHeight - DOCK_MENU_BAR_HEIGHT;
+  const height = window.innerHeight - 32;
   if (width <= 0 || height <= 0) {
     return null;
   }
@@ -59,104 +61,13 @@ const estimateBoardSize = (): DockDimensions | null => {
 const sameBoardSize = (current: DockDimensions | null, width: number, height: number) =>
   current !== null && Math.abs(current.width - width) < 0.5 && Math.abs(current.height - height) < 0.5;
 
-const cloneLayoutState = (state: DockLayoutState): DockLayoutState => ({
-  rows: state.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => ({ ...cell, blockIds: [...cell.blockIds] })) }))
-});
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const finiteNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
-
-const normalizeStoredDockLayout = (value: unknown, blocks: DockBlockDefinition[]): DockLayoutState | null => {
-  const candidate = isRecord(value) && value.version === 1 && 'layout' in value ? value.layout : value;
-  if (!isRecord(candidate) || !Array.isArray(candidate.rows)) {
-    return null;
-  }
-
-  const defaultLayout = createDefaultDockState(blocks);
-  if (candidate.rows.length !== defaultLayout.rows.length) {
-    return null;
-  }
-
-  const validBlockIds = new Set(blocks.map((block) => block.id));
-  const usedBlockIds = new Set<DockBlockId>();
-  const rows: DockRow[] = [];
-
-  for (const [rowIndex, storedRow] of candidate.rows.entries()) {
-    if (!isRecord(storedRow) || !Array.isArray(storedRow.cells)) {
-      return null;
-    }
-
-    const rowSize = finiteNumber(storedRow.size);
-    const row: DockRow = {
-      id: typeof storedRow.id === 'string' ? storedRow.id : (defaultLayout.rows[rowIndex]?.id ?? `row-${rowIndex}`),
-      size: Math.max(0, rowSize ?? defaultLayout.rows[rowIndex]?.size ?? 0),
-      cells: []
-    };
-
-    for (const storedCell of storedRow.cells) {
-      if (!isRecord(storedCell) || !Array.isArray(storedCell.blockIds)) {
-        return null;
-      }
-
-      const blockIds = storedCell.blockIds.filter((blockId): blockId is DockBlockId => {
-        if (typeof blockId !== 'string' || !validBlockIds.has(blockId as DockBlockId) || usedBlockIds.has(blockId as DockBlockId)) {
-          return false;
-        }
-
-        usedBlockIds.add(blockId as DockBlockId);
-        return true;
-      });
-
-      if (blockIds.length === 0) {
-        continue;
-      }
-
-      const cellSize = finiteNumber(storedCell.size);
-      const activeBlockId =
-        typeof storedCell.activeBlockId === 'string' && blockIds.includes(storedCell.activeBlockId as DockBlockId)
-          ? (storedCell.activeBlockId as DockBlockId)
-          : blockIds[0];
-
-      row.cells.push({
-        id: typeof storedCell.id === 'string' ? storedCell.id : `cell-${blockIds.join('-')}`,
-        blockIds,
-        activeBlockId,
-        size: Math.max(0, cellSize ?? 0)
-      });
-    }
-
-    rows.push(row);
-  }
-
-  return { rows };
-};
-
-const readStoredDockLayout = (blocks: DockBlockDefinition[]) => {
-  try {
-    const stored = window.localStorage.getItem(DOCK_LAYOUT_STORAGE_KEY);
-    return stored ? normalizeStoredDockLayout(JSON.parse(stored), blocks) : null;
-  } catch {
-    return null;
-  }
-};
-
-const saveDockLayout = (layout: DockLayoutState) => {
-  try {
-    window.localStorage.setItem(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify({ version: 1, layout: cloneLayoutState(layout) }));
-  } catch {
-    // Ignore storage failures; the in-memory layout should continue to work.
-  }
-};
-
-export function DockLayout({ blocks }: DockLayoutProps) {
-  const [layout, setLayout] = useState<DockLayoutState>(() => readStoredDockLayout(blocks) ?? createDefaultDockState(blocks));
+export function DockLayout({ blocks, initialLayout = null }: DockLayoutProps) {
+  const [layout, setLayout] = useState<DockLayoutState>(() => initialLayout ?? createDefaultDockState(blocks));
   const [dimensions, setDimensions] = useState<DockDimensions | null>(estimateBoardSize);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
-  const latestLayoutRef = useRef(layout);
   const blockMap = useMemo(() => createDockBlockMap(blocks), [blocks]);
   const boardSize = dimensions ?? EMPTY_DOCK_DIMENSIONS;
   const resolvedRows = useMemo(
@@ -165,19 +76,8 @@ export function DockLayout({ blocks }: DockLayoutProps) {
   );
 
   useEffect(() => {
-    latestLayoutRef.current = layout;
-    const saveTimer = window.setTimeout(() => saveDockLayout(layout), 120);
-    return () => window.clearTimeout(saveTimer);
+    rememberDockLayout(layout);
   }, [layout]);
-
-  useEffect(() => {
-    const flushLayout = () => saveDockLayout(latestLayoutRef.current);
-    window.addEventListener('beforeunload', flushLayout);
-    return () => {
-      window.removeEventListener('beforeunload', flushLayout);
-      flushLayout();
-    };
-  }, []);
 
   useEffect(() => {
     dragRef.current = drag;
@@ -419,7 +319,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
                       <button className="dock-close-button" type="button" aria-label={`Close ${activeBlock?.title ?? 'dock'}`} onClick={() => closeBlock(cell.activeBlockId)}>
                         ×
                       </button>
-                      <div className="dock-panel">{activeBlock?.content}</div>
+                      <div className="dock-panel">{activeBlock ? <DockPanel id={activeBlock.id} /> : null}</div>
                     </div>
                     {cellIndex < row.cells.length - 1 && (
                       <div
@@ -430,6 +330,7 @@ export function DockLayout({ blocks }: DockLayoutProps) {
                           event.preventDefault();
                           const left = resolvedRows[rowIndex].cells[cellIndex];
                           const right = resolvedRows[rowIndex].cells[cellIndex + 1];
+                          const pair = left.width + right.width;
                           setResize({
                             type: 'column',
                             rowIndex,
@@ -437,8 +338,8 @@ export function DockLayout({ blocks }: DockLayoutProps) {
                             startX: event.clientX,
                             leftSize: left.width,
                             rightSize: right.width,
-                            leftMin: left.minWidth,
-                            rightMin: right.minWidth
+                            leftMin: splitterFloor(left.minWidth, right.minWidth, pair),
+                            rightMin: splitterFloor(right.minWidth, left.minWidth, pair)
                           });
                         }}
                       />
@@ -454,13 +355,14 @@ export function DockLayout({ blocks }: DockLayoutProps) {
                 aria-orientation="horizontal"
                 onPointerDown={(event) => {
                   event.preventDefault();
+                  const pair = (resolvedRows[0]?.height ?? 0) + (resolvedRows[1]?.height ?? 0);
                   setResize({
                     type: 'row',
                     startY: event.clientY,
                     topSize: resolvedRows[0]?.height ?? 0,
                     bottomSize: resolvedRows[1]?.height ?? 0,
-                    topMin: resolvedRows[0]?.minHeight ?? 0,
-                    bottomMin: resolvedRows[1]?.minHeight ?? 0
+                    topMin: splitterFloor(resolvedRows[0]?.minHeight ?? 0, resolvedRows[1]?.minHeight ?? 0, pair),
+                    bottomMin: splitterFloor(resolvedRows[1]?.minHeight ?? 0, resolvedRows[0]?.minHeight ?? 0, pair)
                   });
                 }}
               />
@@ -470,6 +372,11 @@ export function DockLayout({ blocks }: DockLayoutProps) {
       </div>
     </main>
   );
+}
+
+function DockPanel({ id }: { id: DockBlockId }) {
+  const Panel = dockPanels[id];
+  return <Panel />;
 }
 
 const targetFromPoint = (

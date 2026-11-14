@@ -62,7 +62,13 @@ export const rowMinHeight = (row: DockRow, blockMap: DockBlockMap) =>
 export const rowPriority = (row: DockRow, blockMap: DockBlockMap) =>
   row.cells.length === 0 ? 0 : Math.max(...row.cells.map((cell) => cellPriority(cell, blockMap)));
 
-const shrinkToFit = <T extends { min: number; size: number; priority: number }>(items: T[], available: number) => {
+export type FitSpan = {
+  min: number;
+  size: number;
+  priority: number;
+};
+
+const shrinkToFit = (items: FitSpan[], available: number) => {
   let total = items.reduce((sum, item) => sum + item.size, 0);
   if (total <= available) {
     return;
@@ -80,7 +86,7 @@ const shrinkToFit = <T extends { min: number; size: number; priority: number }>(
   }
 };
 
-const giveRemainderToPriority = <T extends { size: number; priority: number }>(items: T[], available: number) => {
+const giveRemainderToPriority = (items: FitSpan[], available: number) => {
   const total = items.reduce((sum, item) => sum + item.size, 0);
   const extra = available - total;
   if (extra <= 0 || items.length === 0) {
@@ -89,6 +95,58 @@ const giveRemainderToPriority = <T extends { size: number; priority: number }>(i
 
   const winner = [...items].sort((a, b) => b.priority - a.priority)[0];
   winner.size += extra;
+};
+
+/** Fit spans into available space. Declared minimums win when they fit; otherwise the shortfall is shared so the painted sum matches the board. */
+export const fitSpans = (items: FitSpan[], available: number) => {
+  if (items.length === 0) {
+    return;
+  }
+
+  const room = Math.max(0, available);
+  if (room === 0) {
+    items.forEach((item) => {
+      item.size = 0;
+    });
+    return;
+  }
+
+  const minSum = items.reduce((sum, item) => sum + item.min, 0);
+  if (minSum > room) {
+    const weights = items.map((item) => Math.max(item.size, item.min, 0));
+    const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+    let assigned = 0;
+    items.forEach((item, index) => {
+      if (index === items.length - 1) {
+        item.size = Math.max(0, room - assigned);
+        return;
+      }
+
+      const share = weightSum === 0 ? room / items.length : (room * weights[index]) / weightSum;
+      item.size = share;
+      assigned += share;
+    });
+    return;
+  }
+
+  items.forEach((item) => {
+    item.size = Math.max(item.size, item.min);
+  });
+  shrinkToFit(items, room);
+  giveRemainderToPriority(items, room);
+};
+
+/** Minimum a splitter may apply. Declared minimums are kept when the pair fits; otherwise the pair stays inside the space it already occupies. */
+export const splitterFloor = (spanMin: number, peerMin: number, available: number) => {
+  if (!(available > 0)) {
+    return 0;
+  }
+
+  if (spanMin + peerMin <= available) {
+    return spanMin;
+  }
+
+  return Math.min(spanMin, available / 2);
 };
 
 export const resolveDockLayout = (state: DockLayoutState, blocks: DockBlockDefinition[], dimensions: DockDimensions): ResolvedDockRow[] => {
@@ -101,18 +159,14 @@ export const resolveDockLayout = (state: DockLayoutState, blocks: DockBlockDefin
         ...cell,
         minWidth,
         minHeight: cellMinHeight(cell, blockMap),
-        width: Math.max(cell.size, minWidth),
+        width: cell.size,
         priority: cellPriority(cell, blockMap)
       };
     });
 
     const adjustedCells = cells.map((cell) => ({ ...cell }));
     const shrinkItems = adjustedCells.map((cell) => ({ min: cell.minWidth, size: cell.width, priority: cell.priority, cell }));
-    shrinkToFit(shrinkItems, availableRowWidth);
-    shrinkItems.forEach((item) => {
-      item.cell.width = item.size;
-    });
-    giveRemainderToPriority(shrinkItems, availableRowWidth);
+    fitSpans(shrinkItems, availableRowWidth);
     shrinkItems.forEach((item) => {
       item.cell.width = item.size;
     });
@@ -122,18 +176,14 @@ export const resolveDockLayout = (state: DockLayoutState, blocks: DockBlockDefin
       ...row,
       cells: adjustedCells,
       minHeight,
-      height: Math.max(row.size, minHeight),
+      height: row.size,
       priority: rowPriority(row, blockMap)
     };
   });
 
   const availableHeight = Math.max(0, dimensions.height - Math.max(0, rows.filter((row) => row.cells.length > 0).length - 1) * DOCK_SPLITTER_SIZE);
   const rowItems = rows.map((row) => ({ min: row.minHeight, size: row.height, priority: row.priority, row }));
-  shrinkToFit(rowItems, availableHeight);
-  rowItems.forEach((item) => {
-    item.row.height = item.size;
-  });
-  giveRemainderToPriority(rowItems, availableHeight);
+  fitSpans(rowItems, availableHeight);
   rowItems.forEach((item) => {
     item.row.height = item.size;
   });
@@ -260,6 +310,75 @@ export const canApplyDockDrop = (
       Math.max(0, candidate.rows.filter((candidateRow) => candidateRow.cells.length > 0).length - 1) * DOCK_SPLITTER_SIZE <=
       dimensions.height
   );
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const finiteNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+export const normalizeStoredDockLayout = (value: unknown, blocks: DockBlockDefinition[]): DockLayoutState | null => {
+  const candidate = isRecord(value) && value.version === 1 && 'layout' in value ? value.layout : value;
+  if (!isRecord(candidate) || !Array.isArray(candidate.rows)) {
+    return null;
+  }
+
+  const defaultLayout = createDefaultDockState(blocks);
+  if (candidate.rows.length !== defaultLayout.rows.length) {
+    return null;
+  }
+
+  const validBlockIds = new Set(blocks.map((block) => block.id));
+  const usedBlockIds = new Set<DockBlockId>();
+  const rows: DockRow[] = [];
+
+  for (const [rowIndex, storedRow] of candidate.rows.entries()) {
+    if (!isRecord(storedRow) || !Array.isArray(storedRow.cells)) {
+      return null;
+    }
+
+    const rowSize = finiteNumber(storedRow.size);
+    const row: DockRow = {
+      id: typeof storedRow.id === 'string' ? storedRow.id : (defaultLayout.rows[rowIndex]?.id ?? `row-${rowIndex}`),
+      size: Math.max(0, rowSize ?? defaultLayout.rows[rowIndex]?.size ?? 0),
+      cells: []
+    };
+
+    for (const storedCell of storedRow.cells) {
+      if (!isRecord(storedCell) || !Array.isArray(storedCell.blockIds)) {
+        return null;
+      }
+
+      const blockIds = storedCell.blockIds.filter((blockId): blockId is DockBlockId => {
+        if (typeof blockId !== 'string' || !validBlockIds.has(blockId as DockBlockId) || usedBlockIds.has(blockId as DockBlockId)) {
+          return false;
+        }
+
+        usedBlockIds.add(blockId as DockBlockId);
+        return true;
+      });
+
+      if (blockIds.length === 0) {
+        continue;
+      }
+
+      const cellSize = finiteNumber(storedCell.size);
+      const activeBlockId =
+        typeof storedCell.activeBlockId === 'string' && blockIds.includes(storedCell.activeBlockId as DockBlockId)
+          ? (storedCell.activeBlockId as DockBlockId)
+          : blockIds[0];
+
+      row.cells.push({
+        id: typeof storedCell.id === 'string' ? storedCell.id : `cell-${blockIds.join('-')}`,
+        blockIds,
+        activeBlockId,
+        size: Math.max(0, cellSize ?? 0)
+      });
+    }
+
+    rows.push(row);
+  }
+
+  return { rows };
 };
 
 export const setDockCellActiveBlock = (state: DockLayoutState, rowIndex: number, cellIndex: number, blockId: DockBlockId): DockLayoutState => ({
