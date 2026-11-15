@@ -1,6 +1,6 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { lightingPresets as defaultLightingPresets, ptzPresets } from '../demo/presets';
-import type { CameraLook, CropRect, LayoutPresetId, LightingPreset, MediaMode, MediaState, PtzPreset } from '../types';
+import type { CameraLook, CropRect, LightingPreset, MediaMode, MediaState, PtzPreset } from '../types';
 import type { FeedKind } from '../types';
 
 export type SessionState = {
@@ -11,9 +11,6 @@ export type SessionState = {
   lightingPresets: LightingPreset[];
   activePresetId: string | null;
   activeLightingPresetId: string | null;
-  activeLayout: LayoutPresetId;
-  isStreaming: boolean;
-  isRecording: boolean;
   mainFeed: FeedKind;
   media: MediaState;
   playbackProgress: number;
@@ -40,9 +37,6 @@ const createInitialState = (): SessionState => ({
   lightingPresets: cloneLightingPresets(defaultLightingPresets),
   activePresetId: ptzPresets[0].id,
   activeLightingPresetId: defaultLightingPresets[0].id,
-  activeLayout: 'media-portrait-right',
-  isStreaming: false,
-  isRecording: false,
   mainFeed: 'wide',
   media: { mode: 'slides', isPlaying: false, slideIndex: 0 },
   playbackProgress: 0,
@@ -150,18 +144,6 @@ export const setMainFeed = (mainFeed: FeedKind) => {
   update((current) => (current.mainFeed === mainFeed ? current : { ...current, mainFeed }));
 };
 
-export const setActiveLayout = (activeLayout: LayoutPresetId) => {
-  update((current) => (current.activeLayout === activeLayout ? current : { ...current, activeLayout }));
-};
-
-export const setStreaming = (isStreaming: boolean) => {
-  update((current) => (current.isStreaming === isStreaming ? current : { ...current, isStreaming }));
-};
-
-export const setRecording = (isRecording: boolean) => {
-  update((current) => (current.isRecording === isRecording ? current : { ...current, isRecording }));
-};
-
 export const setMedia = (media: MediaState) => {
   update((current) => (current.media === media ? current : { ...current, media }));
 };
@@ -208,14 +190,13 @@ export const setPlaybackDuration = (playbackDuration: number) => {
   update((current) => (Object.is(current.playbackDuration, playbackDuration) ? current : { ...current, playbackDuration }));
 };
 
-export const hydrateSession = (patch: Pick<SessionState, 'presets' | 'lightingPresets' | 'activeLayout'>) => {
+export const hydrateSession = (patch: Pick<SessionState, 'presets' | 'lightingPresets'>) => {
   const presets = clonePresets(patch.presets);
   const lightingPresets = cloneLightingPresets(patch.lightingPresets);
   state = {
     ...state,
     presets,
     lightingPresets,
-    activeLayout: patch.activeLayout,
     crop: { ...presets[0].crop },
     cameraLook: { ...lightingPresets[0].look },
     activePresetId: presets[0].id,

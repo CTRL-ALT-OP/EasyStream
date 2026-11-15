@@ -1,4 +1,4 @@
-import type { LayoutPreset, LightingPreset, PtzPreset } from '../types';
+import type { LightingPreset, PtzPreset } from '../types';
 
 export const ptzPresets: PtzPreset[] = [
   {
@@ -57,32 +57,5 @@ export const lightingPresets: LightingPreset[] = [
     label: 'Cool LED',
     description: 'Blue-white fixture wash',
     look: { brightness: 96, contrast: 110, saturation: 118, warmth: -28 }
-  }
-];
-
-export const layoutPresets: LayoutPreset[] = [
-  {
-    id: 'ptz-full',
-    label: 'PTZ Full'
-  },
-  {
-    id: 'media-full',
-    label: 'Media Full'
-  },
-  {
-    id: 'media-portrait-right',
-    label: 'Media + Speaker'
-  },
-  {
-    id: 'media-portrait-tight',
-    label: 'Media + Tight PTZ'
-  },
-  {
-    id: 'media-camera-below',
-    label: 'Camera Below'
-  },
-  {
-    id: 'media-camera-above',
-    label: 'Camera Above'
   }
 ];

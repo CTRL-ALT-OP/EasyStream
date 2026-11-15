@@ -11,7 +11,7 @@ const NOTES = {
   },
   output: {
     title: 'Output',
-    body: 'Connect with OBS running the actual production in the background.'
+    body: 'Scenes, streaming, and recording control the OBS program output.'
   },
   media: {
     title: 'Media',

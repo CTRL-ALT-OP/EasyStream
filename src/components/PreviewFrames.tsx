@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { cropTransform, fitCrop, portraitWindow, TIGHT_PORTRAIT_SCALE } from '../lib/crop';
+import { cropTransform, fitCrop } from '../lib/crop';
 import { loadDownsampledStill } from '../lib/stillCache';
 import { getSessionState, setPlaybackDuration, setPlaybackProgress, subscribeSession } from '../lib/session';
 import { attachVideo, drawVideoFrame, registerVideoSink, startVideoLoop, stopVideoLoop } from '../lib/videoFrames';
@@ -10,8 +10,6 @@ type PtzFrameProps = {
   crop: CropRect;
   look?: CameraLook;
   className?: string;
-  portrait?: boolean;
-  tight?: boolean;
   downsampled?: boolean;
 };
 
@@ -224,8 +222,8 @@ export function FeedProjectionProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function PtzFrame({ crop, look, className = '', portrait = false, tight = false, downsampled = false }: PtzFrameProps) {
-  const frame = portrait ? portraitWindow(crop, tight ? TIGHT_PORTRAIT_SCALE : 1) : fitCrop(crop);
+export function PtzFrame({ crop, look, className = '', downsampled = false }: PtzFrameProps) {
+  const frame = fitCrop(crop);
   const warmth = look?.warmth ?? 0;
   const imageStyle: CSSProperties = {
     transform: cropTransform(frame),
@@ -237,7 +235,7 @@ export function PtzFrame({ crop, look, className = '', portrait = false, tight =
   };
 
   return (
-    <div className={`frame ptz-frame ${portrait ? 'portrait-frame' : ''} ${className}`}>
+    <div className={`frame ptz-frame ${className}`}>
       <SourcePicture source={ptzCameraSource} downsampled={downsampled} alt="Simulated PTZ crop" style={imageStyle} />
       <div className="ptz-lighting-tint" style={tintStyle} />
       <div className="ptz-lens-vignette" />

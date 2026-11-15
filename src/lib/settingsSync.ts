@@ -2,7 +2,6 @@ import { dockBlocks } from '../docks/blocks';
 import { normalizeStoredDockLayout } from '../docks/layout';
 import type { DockLayoutState } from '../docks/types';
 import { lightingPresets, ptzPresets } from '../demo/presets';
-import type { LayoutPresetId } from '../types';
 import { parseSettingsDocument, SETTINGS_VERSION, type AppSettingsDocument } from '../../shared/settings';
 import { getSessionState, subscribeSession } from './session';
 
@@ -14,7 +13,6 @@ let saveTimer: number | null = null;
 let ready = false;
 let seenPresets = getSessionState().presets;
 let seenLightingPresets = getSessionState().lightingPresets;
-let seenLayout = getSessionState().activeLayout;
 
 export const currentSettingsDocument = (): AppSettingsDocument => {
   const current = getSessionState();
@@ -22,7 +20,6 @@ export const currentSettingsDocument = (): AppSettingsDocument => {
     version: SETTINGS_VERSION,
     presets: current.presets,
     lightingPresets: current.lightingPresets,
-    activeLayout: current.activeLayout,
     dockLayout
   };
 };
@@ -69,17 +66,15 @@ export const startSettingsSync = () => {
   const current = getSessionState();
   seenPresets = current.presets;
   seenLightingPresets = current.lightingPresets;
-  seenLayout = current.activeLayout;
   window.addEventListener('beforeunload', saveSettingsNow);
   return subscribeSession(() => {
     const next = getSessionState();
-    if (next.presets === seenPresets && next.lightingPresets === seenLightingPresets && next.activeLayout === seenLayout) {
+    if (next.presets === seenPresets && next.lightingPresets === seenLightingPresets) {
       return;
     }
 
     seenPresets = next.presets;
     seenLightingPresets = next.lightingPresets;
-    seenLayout = next.activeLayout;
     scheduleSave();
   });
 };
@@ -101,11 +96,10 @@ const clearLegacyDockLayout = () => {
   }
 };
 
-const defaultDocument = (layout: DockLayoutState | null, activeLayout: LayoutPresetId): AppSettingsDocument => ({
+const defaultDocument = (layout: DockLayoutState | null): AppSettingsDocument => ({
   version: SETTINGS_VERSION,
   presets: ptzPresets.map((preset) => ({ ...preset, crop: { ...preset.crop } })),
   lightingPresets: lightingPresets.map((preset) => ({ ...preset, look: { ...preset.look } })),
-  activeLayout,
   dockLayout: layout
 });
 
@@ -121,7 +115,7 @@ export const loadAppSettings = async () => {
 
   const legacyLayout = readLegacyDockLayout();
   if (!parsed) {
-    const document = defaultDocument(legacyLayout, 'media-portrait-right');
+    const document = defaultDocument(legacyLayout);
     dockLayout = legacyLayout;
     if (window.easystream) {
       await window.easystream.saveSettings(document);

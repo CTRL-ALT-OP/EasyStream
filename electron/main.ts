@@ -2,6 +2,17 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseSettingsDocument, type AppSettingsDocument } from '../shared/settings';
+import {
+  getObsSnapshot,
+  getObsStreamSettings,
+  getObsThumbnails,
+  setObsPreviewTarget,
+  setObsProgramScene,
+  setObsRecording,
+  setObsStreaming,
+  startObsClient,
+  stopObsClient
+} from './obsClient';
 
 const DEFAULT_WINDOW_WIDTH = 1440;
 const DEFAULT_WINDOW_HEIGHT = 980;
@@ -113,7 +124,7 @@ const createWindow = (): void => {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       sandbox: true
     }
@@ -147,6 +158,16 @@ const createWindow = (): void => {
 app.whenReady().then(() => {
   ipcMain.handle('settings:load', () => readSettingsDocument());
   ipcMain.handle('settings:save', (_event, value: unknown) => writeSettingsDocument(value));
+  ipcMain.handle('obs:get-state', () => getObsSnapshot());
+  ipcMain.handle('obs:get-thumbnails', () => getObsThumbnails());
+  ipcMain.handle('obs:set-scene', (_event, sceneName: unknown) => setObsProgramScene(sceneName));
+  ipcMain.handle('obs:set-streaming', (_event, active: unknown) => setObsStreaming(active));
+  ipcMain.handle('obs:set-recording', (_event, active: unknown) => setObsRecording(active));
+  ipcMain.handle('obs:get-settings', () => getObsStreamSettings());
+  ipcMain.handle('obs:set-preview-target', (_event, target: unknown) => {
+    setObsPreviewTarget(target);
+  });
+  startObsClient();
   createWindow();
 
   app.on('activate', () => {
@@ -154,6 +175,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  stopObsClient();
 });
 
 app.on('window-all-closed', () => {

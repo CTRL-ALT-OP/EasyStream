@@ -1,16 +1,5 @@
 export const SETTINGS_VERSION = 1;
 
-export const layoutPresetIds = [
-  'ptz-full',
-  'media-full',
-  'media-portrait-right',
-  'media-portrait-tight',
-  'media-camera-below',
-  'media-camera-above'
-] as const;
-
-export type LayoutPresetId = (typeof layoutPresetIds)[number];
-
 export type CropRect = {
   x: number;
   y: number;
@@ -59,7 +48,6 @@ export type AppSettingsDocument = {
   version: typeof SETTINGS_VERSION;
   presets: PtzPreset[];
   lightingPresets: LightingPreset[];
-  activeLayout: LayoutPresetId;
   dockLayout: unknown;
 };
 
@@ -143,9 +131,6 @@ const parseLightingPresets = (value: unknown): LightingPreset[] | null => {
   return presets;
 };
 
-const isLayoutPresetId = (value: unknown): value is LayoutPresetId =>
-  typeof value === 'string' && layoutPresetIds.some((id) => id === value);
-
 export const parseSettingsDocument = (value: unknown): AppSettingsDocument | null => {
   if (!isRecord(value) || value.version !== SETTINGS_VERSION) {
     return null;
@@ -153,7 +138,7 @@ export const parseSettingsDocument = (value: unknown): AppSettingsDocument | nul
 
   const presets = parsePresets(value.presets);
   const lightingPresets = parseLightingPresets(value.lightingPresets);
-  if (!presets || !lightingPresets || !isLayoutPresetId(value.activeLayout)) {
+  if (!presets || !lightingPresets) {
     return null;
   }
 
@@ -161,7 +146,6 @@ export const parseSettingsDocument = (value: unknown): AppSettingsDocument | nul
     version: SETTINGS_VERSION,
     presets,
     lightingPresets,
-    activeLayout: value.activeLayout,
     dockLayout: value.dockLayout ?? null
   };
 };

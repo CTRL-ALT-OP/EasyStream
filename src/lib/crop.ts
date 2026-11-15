@@ -3,11 +3,6 @@ import type { CropRect } from '../types';
 export const MIN_CROP = 12;
 export const MAX_CROP = 100;
 
-/** Width% / height% for a 9:16 window on a 16:9 source. */
-export const PORTRAIT_CUT = 81 / 256;
-
-export const TIGHT_PORTRAIT_SCALE = 0.72;
-
 export type CropPoint = {
   x: number;
   y: number;
@@ -87,17 +82,4 @@ export function cropPlacement(frame: CropRect) {
 export function cropTransform(frame: CropRect) {
   const placement = cropPlacement(frame);
   return `translate3d(${placement.translateX}%, ${placement.translateY}%, 0) scale(${placement.scaleX}, ${placement.scaleY})`;
-}
-
-/** Centered 9:16 cut of a 16:9 crop. Tightness below 1 zooms that cut in. */
-export function portraitWindow(crop: CropRect, tightness = 1): CropRect {
-  const current = fitCrop(crop);
-  const height = current.height * tightness;
-  const width = height * PORTRAIT_CUT;
-  return {
-    x: current.x + (current.width - width) / 2,
-    y: current.y + (current.height - height) / 2,
-    width,
-    height
-  };
 }

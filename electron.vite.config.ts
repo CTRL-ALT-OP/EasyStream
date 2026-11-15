@@ -6,6 +6,7 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
+        external: ['ws', 'bufferutil', 'utf-8-validate'],
         input: {
           index: resolve(__dirname, 'electron/main.ts')
         }
@@ -17,6 +18,11 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'electron/preload.ts')
+        },
+        output: {
+          format: 'cjs',
+          inlineDynamicImports: true,
+          entryFileNames: 'index.cjs'
         }
       }
     }

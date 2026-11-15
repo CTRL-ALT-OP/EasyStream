@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_CROP, PORTRAIT_CUT, TIGHT_PORTRAIT_SCALE, cropFromSelection, cropPlacement, fitCrop, panCrop, portraitWindow, zoomCrop } from './crop';
+import { MIN_CROP, cropFromSelection, cropPlacement, fitCrop, panCrop, zoomCrop } from './crop';
 
 describe('crop math', () => {
   const crop = { x: 20, y: 30, width: 40, height: 40 };
@@ -28,13 +28,11 @@ describe('crop math', () => {
     expect(selected.x + selected.width).toBeLessThanOrEqual(100);
   });
 
-  it('cuts a portrait window with unequal placement scales', () => {
-    const portrait = portraitWindow(crop, 1);
-    expect(portrait.height).toBeCloseTo(40);
-    expect(portrait.width).toBeCloseTo(40 * PORTRAIT_CUT);
-    const tight = portraitWindow(crop, TIGHT_PORTRAIT_SCALE);
-    expect(tight.height).toBeCloseTo(40 * TIGHT_PORTRAIT_SCALE);
-    const placement = cropPlacement(portrait);
-    expect(placement.scaleX).not.toBeCloseTo(placement.scaleY);
+  it('places a crop from the top left of the view', () => {
+    const placement = cropPlacement(crop);
+    expect(placement.scaleX).toBeCloseTo(2.5);
+    expect(placement.scaleY).toBeCloseTo(2.5);
+    expect(placement.translateX).toBeCloseTo(-50);
+    expect(placement.translateY).toBeCloseTo(-75);
   });
 });

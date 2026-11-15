@@ -1,5 +1,4 @@
-export type { CameraLook, CropRect, LayoutPresetId, LightingPreset, PtzPreset } from '../shared/settings';
-import type { LayoutPresetId } from '../shared/settings';
+export type { CameraLook, CropRect, LightingPreset, PtzPreset } from '../shared/settings';
 
 export type CameraSource =
   | { kind: 'still'; url: string }
@@ -7,11 +6,6 @@ export type CameraSource =
   | { kind: 'camera'; deviceId: string };
 
 export type FeedKind = 'wide' | 'ptz';
-
-export type LayoutPreset = {
-  id: LayoutPresetId;
-  label: string;
-};
 
 export type MediaMode = 'slides' | 'video';
 
