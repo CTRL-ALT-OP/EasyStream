@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { CameraSettings } from '../components/CameraSettings';
 import { rememberDockLayout } from '../lib/settingsSync';
 import {
   applyDockDrop,
@@ -66,6 +67,8 @@ export function DockLayout({ blocks, initialLayout = null }: DockLayoutProps) {
   const [dimensions, setDimensions] = useState<DockDimensions | null>(estimateBoardSize);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [resize, setResize] = useState<ResizeState | null>(null);
+  const [cameraSettingsOpen, setCameraSettingsOpen] = useState(false);
+  const camerasMenuRef = useRef<HTMLDetailsElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const blockMap = useMemo(() => createDockBlockMap(blocks), [blocks]);
@@ -256,6 +259,21 @@ export function DockLayout({ blocks, initialLayout = null }: DockLayoutProps) {
             })}
           </div>
         </details>
+        <details className="dock-menu" ref={camerasMenuRef}>
+          <summary>Cameras</summary>
+          <div className="dock-menu-list">
+            <button
+              type="button"
+              onClick={() => {
+                camerasMenuRef.current?.removeAttribute('open');
+                setCameraSettingsOpen(true);
+              }}
+            >
+              <span />
+              Camera settings
+            </button>
+          </div>
+        </details>
       </div>
 
       <div className="dock-board" ref={boardRef}>
@@ -370,6 +388,7 @@ export function DockLayout({ blocks, initialLayout = null }: DockLayoutProps) {
           </Fragment>
         ))}
       </div>
+      {cameraSettingsOpen ? <CameraSettings onClose={() => setCameraSettingsOpen(false)} /> : null}
     </main>
   );
 }

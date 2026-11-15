@@ -6,7 +6,7 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        external: ['ws', 'bufferutil', 'utf-8-validate'],
+        external: ['ws', 'bufferutil', 'utf-8-validate', 'ffmpeg-static', '@techstark/opencv-js'],
         input: {
           index: resolve(__dirname, 'electron/main.ts')
         }

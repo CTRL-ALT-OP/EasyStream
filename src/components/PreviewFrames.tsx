@@ -1,16 +1,15 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { cropTransform, fitCrop } from '../lib/crop';
 import { loadDownsampledStill } from '../lib/stillCache';
 import { getSessionState, setPlaybackDuration, setPlaybackProgress, subscribeSession } from '../lib/session';
+import { useCamera } from '../lib/cameras';
 import { attachVideo, drawVideoFrame, registerVideoSink, startVideoLoop, stopVideoLoop } from '../lib/videoFrames';
-import { demoSlides, demoVideoSource, ptzCameraSource, wideCameraSource } from '../sources';
-import type { CameraLook, CameraSource, CropRect, MediaMode } from '../types';
+import { demoSlides, demoVideoSource } from '../sources';
+import type { CameraLook, MediaMode } from '../types';
 
 type PtzFrameProps = {
-  crop: CropRect;
   look?: CameraLook;
   className?: string;
-  downsampled?: boolean;
+  compact?: boolean;
 };
 
 type MediaFrameProps = {
@@ -92,28 +91,6 @@ function VideoSurface({ downsampled = false }: { downsampled?: boolean }) {
   }, [downsampled]);
 
   return <canvas ref={canvasRef} aria-label="Video frame" />;
-}
-
-function SourcePicture({
-  source,
-  downsampled = false,
-  alt,
-  style
-}: {
-  source: CameraSource;
-  downsampled?: boolean;
-  alt: string;
-  style?: CSSProperties;
-}) {
-  if (source.kind === 'still') {
-    return <StillPicture url={source.url} downsampled={downsampled} alt={alt} style={style} />;
-  }
-
-  if (source.kind === 'video') {
-    return <VideoSurface downsampled={downsampled} />;
-  }
-
-  return null;
 }
 
 export function FeedProjectionProvider({ children }: { children: ReactNode }) {
@@ -212,21 +189,26 @@ export function FeedProjectionProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const videoUrl = demoVideoSource.kind === 'video' ? demoVideoSource.url : undefined;
-
   return (
     <>
-      {videoUrl && <video ref={videoRef} className="feed-video-owner" src={videoUrl} muted loop playsInline preload="auto" />}
+      <video ref={videoRef} className="feed-video-owner" src={demoVideoSource} muted loop playsInline preload="auto" />
       {children}
     </>
   );
 }
 
-export function PtzFrame({ crop, look, className = '', downsampled = false }: PtzFrameProps) {
-  const frame = fitCrop(crop);
+function LiveFeed({ feed, alt, style, compact = false }: { feed: 'wide' | 'ptz'; alt: string; style?: CSSProperties; compact?: boolean }) {
+  const frame = useCamera((current) => (feed === 'wide' ? current.wide : current.ptz));
+  if (!frame) {
+    return <div className="feed-offline">{compact ? 'Offline' : feed === 'wide' ? 'Wide camera offline' : 'PTZ camera offline'}</div>;
+  }
+
+  return <img src={frame.image} alt={alt} draggable={false} style={style} />;
+}
+
+export function PtzFrame({ look, className = '', compact = false }: PtzFrameProps) {
   const warmth = look?.warmth ?? 0;
   const imageStyle: CSSProperties = {
-    transform: cropTransform(frame),
     filter: look ? `brightness(${look.brightness}%) contrast(${look.contrast}%) saturate(${look.saturation}%)` : undefined
   };
   const tintStyle: CSSProperties = {
@@ -236,18 +218,17 @@ export function PtzFrame({ crop, look, className = '', downsampled = false }: Pt
 
   return (
     <div className={`frame ptz-frame ${className}`}>
-      <SourcePicture source={ptzCameraSource} downsampled={downsampled} alt="Simulated PTZ crop" style={imageStyle} />
+      <LiveFeed feed="ptz" alt="PTZ camera" style={imageStyle} compact={compact} />
       <div className="ptz-lighting-tint" style={tintStyle} />
       <div className="ptz-lens-vignette" />
     </div>
   );
 }
 
-export function WideFrame({ className = '', downsampled = false }: { className?: string; downsampled?: boolean }) {
+export function WideFrame({ className = '', compact = false }: { className?: string; compact?: boolean }) {
   return (
     <div className={`frame wide-frame ${className}`}>
-      <SourcePicture source={wideCameraSource} downsampled={downsampled} alt="Simulated wide-angle auditorium feed" />
-      <div className="wide-grid" />
+      <LiveFeed feed="wide" alt="Wide-angle camera" compact={compact} />
     </div>
   );
 }

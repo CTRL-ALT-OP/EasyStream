@@ -1,10 +1,9 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { lightingPresets as defaultLightingPresets, ptzPresets } from '../demo/presets';
-import type { CameraLook, CropRect, LightingPreset, MediaMode, MediaState, PtzPreset } from '../types';
+import type { CameraLook, LightingPreset, MediaMode, MediaState, PtzPreset } from '../types';
 import type { FeedKind } from '../types';
 
 export type SessionState = {
-  crop: CropRect;
   cameraLook: CameraLook;
   panZoomSpeed: number;
   presets: PtzPreset[];
@@ -17,11 +16,8 @@ export type SessionState = {
   playbackDuration: number;
 };
 
-const clonePresets = (source: PtzPreset[]) => source.map((preset) => ({ ...preset, crop: { ...preset.crop } }));
+const clonePresets = (source: PtzPreset[]) => source.map((preset) => ({ ...preset }));
 const cloneLightingPresets = (source: LightingPreset[]) => source.map((preset) => ({ ...preset, look: { ...preset.look } }));
-
-const sameCrop = (a: CropRect, b: CropRect) =>
-  Math.abs(a.x - b.x) < 0.05 && Math.abs(a.y - b.y) < 0.05 && Math.abs(a.width - b.width) < 0.05 && Math.abs(a.height - b.height) < 0.05;
 
 const sameCameraLook = (a: CameraLook, b: CameraLook) =>
   Math.abs(a.brightness - b.brightness) < 0.5 &&
@@ -30,12 +26,11 @@ const sameCameraLook = (a: CameraLook, b: CameraLook) =>
   Math.abs(a.warmth - b.warmth) < 0.5;
 
 const createInitialState = (): SessionState => ({
-  crop: { ...ptzPresets[0].crop },
   cameraLook: { ...defaultLightingPresets[0].look },
   panZoomSpeed: 1,
   presets: clonePresets(ptzPresets),
   lightingPresets: cloneLightingPresets(defaultLightingPresets),
-  activePresetId: ptzPresets[0].id,
+  activePresetId: null,
   activeLightingPresetId: defaultLightingPresets[0].id,
   mainFeed: 'wide',
   media: { mode: 'slides', isPlaying: false, slideIndex: 0 },
@@ -87,26 +82,18 @@ export function useSession<T>(selector: (current: SessionState) => T): T {
   return useSyncExternalStore(subscribeSession, getSnapshot, getSnapshot);
 }
 
-export const setCrop = (crop: CropRect) => {
-  update((current) => {
-    const preset = current.activePresetId === null ? undefined : current.presets.find((item) => item.id === current.activePresetId);
-    const activePresetId = preset && sameCrop(preset.crop, crop) ? current.activePresetId : null;
-    if (current.crop === crop && current.activePresetId === activePresetId) {
-      return current;
-    }
-
-    return { ...current, crop, activePresetId };
-  });
+export const setActivePreset = (presetId: string | null) => {
+  update((current) => (current.activePresetId === presetId ? current : { ...current, activePresetId: presetId }));
 };
 
-export const recallPreset = (preset: PtzPreset) => {
-  update((current) => ({ ...current, crop: { ...preset.crop }, activePresetId: preset.id }));
-};
-
-export const savePreset = (presetId: string) => {
+export const savePreset = (presetId: string, pose: { pan: number; tilt: number; zoom: number } | null, thumbnail: string | null) => {
   update((current) => ({
     ...current,
-    presets: current.presets.map((preset) => (preset.id === presetId ? { ...preset, crop: { ...current.crop } } : preset)),
+    presets: current.presets.map((preset) =>
+      preset.id === presetId
+        ? { ...preset, pan: pose?.pan ?? null, tilt: pose?.tilt ?? null, zoom: pose?.zoom ?? null, thumbnail }
+        : preset
+    ),
     activePresetId: presetId
   }));
 };
@@ -197,9 +184,8 @@ export const hydrateSession = (patch: Pick<SessionState, 'presets' | 'lightingPr
     ...state,
     presets,
     lightingPresets,
-    crop: { ...presets[0].crop },
     cameraLook: { ...lightingPresets[0].look },
-    activePresetId: presets[0].id,
+    activePresetId: null,
     activeLightingPresetId: lightingPresets[0].id
   };
 };

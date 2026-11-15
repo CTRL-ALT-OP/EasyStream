@@ -1,9 +1,4 @@
-export type { CameraLook, CropRect, LightingPreset, PtzPreset } from '../shared/settings';
-
-export type CameraSource =
-  | { kind: 'still'; url: string }
-  | { kind: 'video'; url: string }
-  | { kind: 'camera'; deviceId: string };
+export type { CameraLook, LightingPreset, PtzPreset } from '../shared/settings';
 
 export type FeedKind = 'wide' | 'ptz';
 

@@ -1,68 +1,61 @@
 import { Camera, Maximize2, MousePointer2 } from 'lucide-react';
-import { useState } from 'react';
-import { centerCropAt, cropFromSelection, fitCrop, type CropPoint } from '../lib/crop';
-import { getSessionState, setCrop, setMainFeed, useSession } from '../lib/session';
+import { useEffect, useRef, useState } from 'react';
+import { frameSelection, isFramingDrag, profileIsCurrent, projectPose, scaleRect } from '../../shared/aim';
+import { viewRectFromSource, sourcePointFromView } from '../../shared/view';
+import { aimWidePoint, frameWideRect, useCamera, getCameraState } from '../lib/cameras';
+import { setMainFeed, useSession } from '../lib/session';
 import { PtzFrame, WideFrame } from './PreviewFrames';
 import type { FeedKind } from '../types';
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-
-function SubscribedPtzFrame({ downsampled = false }: { downsampled?: boolean }) {
-  const crop = useSession((current) => current.crop);
-  const look = useSession((current) => current.cameraLook);
-  return <PtzFrame crop={crop} look={look} downsampled={downsampled} />;
-}
-
-function CropOutline() {
-  const crop = useSession((current) => current.crop);
-  const fitted = fitCrop(crop);
-  const scaleX = fitted.width / 100;
-  const scaleY = fitted.height / 100;
-  const borderScale = (scaleX + scaleY) / 2 || 1;
-
-  return (
-    <div
-      className="ptz-outline"
-      style={{
-        transform: `translate3d(${fitted.x}%, ${fitted.y}%, 0) scale(${scaleX}, ${scaleY})`,
-        borderTopWidth: `${2 / scaleY}px`,
-        borderRightWidth: `${2 / scaleX}px`,
-        borderBottomWidth: `${2 / scaleY}px`,
-        borderLeftWidth: `${2 / scaleX}px`,
-        boxShadow: `0 0 0 ${999 / borderScale}px rgba(0, 0, 0, 0.28)`
-      }}
-    />
-  );
-}
+type Point = { x: number; y: number };
 
 export function CameraPreview() {
   const mainFeed = useSession((current) => current.mainFeed);
-  const [dragStart, setDragStart] = useState<CropPoint | null>(null);
-  const [dragCurrent, setDragCurrent] = useState<CropPoint | null>(null);
+  const look = useSession((current) => current.cameraLook);
+  const pose = useCamera((current) => current.pose);
+  const calibration = useCamera((current) => current.calibration);
+  const config = useCamera((current) => current.config);
+  const wide = useCamera((current) => current.wide);
+  const notice = useCamera((current) => current.notice);
+  const [dragStart, setDragStart] = useState<Point | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<Point | null>(null);
+  const [outline, setOutline] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const pipFeed: FeedKind = mainFeed === 'wide' ? 'ptz' : 'wide';
 
-  const viewPointFromEvent = (event: React.PointerEvent<HTMLDivElement>): CropPoint => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return {
-      x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
-      y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
-    };
-  };
-
-  const imagePointFromViewPoint = (point: CropPoint): CropPoint => {
-    if (mainFeed === 'wide') {
-      return point;
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node || mainFeed !== 'wide' || !pose || !wide || !profileIsCurrent(calibration, config)) {
+      setOutline(null);
+      return;
     }
 
-    const crop = getSessionState().crop;
-    return {
-      x: crop.x + (point.x / 100) * crop.width,
-      y: crop.y + (point.y / 100) * crop.height
+    const updateOutline = () => {
+      const projected = projectPose(calibration!, pose.pan, pose.tilt, pose.zoom);
+      if (!projected) {
+        setOutline(null);
+        return;
+      }
+      const previewRect = scaleRect(projected, calibration!.wideWidth, calibration!.wideHeight, wide.width, wide.height);
+      setOutline(viewRectFromSource(previewRect, node.clientWidth, node.clientHeight, wide.width, wide.height));
     };
+
+    updateOutline();
+    const observer = new ResizeObserver(updateOutline);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [calibration, config, mainFeed, pose, wide]);
+
+  const viewPoint = (event: React.PointerEvent<HTMLDivElement>): Point => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    const point = viewPointFromEvent(event);
+    if (mainFeed !== 'wide') {
+      return;
+    }
+    const point = viewPoint(event);
     setDragStart(point);
     setDragCurrent(point);
     try {
@@ -76,22 +69,29 @@ export function CameraPreview() {
     if (!dragStart) {
       return;
     }
-
-    setDragCurrent(viewPointFromEvent(event));
+    setDragCurrent(viewPoint(event));
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStart) {
+    if (!dragStart || mainFeed !== 'wide') {
+      setDragStart(null);
+      setDragCurrent(null);
       return;
     }
 
-    const end = viewPointFromEvent(event);
-    const distance = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
-
-    if (distance < 2.4) {
-      setCrop(centerCropAt(getSessionState().crop, imagePointFromViewPoint(end)));
-    } else {
-      setCrop(cropFromSelection(imagePointFromViewPoint(dragStart), imagePointFromViewPoint(end)));
+    const end = viewPoint(event);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const distance = Math.hypot(((end.x - dragStart.x) / rect.width) * 100, ((end.y - dragStart.y) / rect.height) * 100);
+    if (wide) {
+      const ptz = getCameraState().ptz;
+      const aspect = ptz && ptz.height > 0 ? ptz.width / ptz.height : 16 / 9;
+      const start = sourcePointFromView(dragStart.x, dragStart.y, rect.width, rect.height, wide.width, wide.height);
+      const finish = sourcePointFromView(end.x, end.y, rect.width, rect.height, wide.width, wide.height);
+      if (!isFramingDrag(distance)) {
+        void aimWidePoint(finish, wide.width, wide.height);
+      } else {
+        void frameWideRect(frameSelection(start, finish, wide.width, wide.height, aspect), wide.width, wide.height);
+      }
     }
 
     setDragStart(null);
@@ -101,10 +101,10 @@ export function CameraPreview() {
   const selectionStyle =
     dragStart && dragCurrent
       ? {
-          left: `${Math.min(dragStart.x, dragCurrent.x)}%`,
-          top: `${Math.min(dragStart.y, dragCurrent.y)}%`,
-          width: `${Math.abs(dragStart.x - dragCurrent.x)}%`,
-          height: `${Math.abs(dragStart.y - dragCurrent.y)}%`
+          left: Math.min(dragStart.x, dragCurrent.x),
+          top: Math.min(dragStart.y, dragCurrent.y),
+          width: Math.abs(dragStart.x - dragCurrent.x),
+          height: Math.abs(dragStart.y - dragCurrent.y)
         }
       : undefined;
 
@@ -121,11 +121,13 @@ export function CameraPreview() {
             <Maximize2 size={13} />
             Drag to frame
           </span>
+          {notice ? <span className="is-warning">{notice}</span> : null}
         </div>
       </div>
       <div className="preview-stage">
         <div
           className={`main-feed ${mainFeed}`}
+          ref={stageRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -134,7 +136,7 @@ export function CameraPreview() {
             setDragCurrent(null);
           }}
         >
-          {mainFeed === 'wide' ? <WideFrame /> : <SubscribedPtzFrame />}
+          {mainFeed === 'wide' ? <WideFrame /> : <PtzFrame look={look} />}
           <div
             className="pip-feed"
             role="button"
@@ -155,11 +157,11 @@ export function CameraPreview() {
               <Camera size={14} />
               {pipFeed === 'wide' ? 'Wide' : 'PTZ'}
             </div>
-            {pipFeed === 'wide' ? <WideFrame downsampled /> : <SubscribedPtzFrame downsampled />}
+            {pipFeed === 'wide' ? <WideFrame compact /> : <PtzFrame look={look} compact />}
           </div>
 
-          {mainFeed === 'wide' && <CropOutline />}
-          {selectionStyle && <div className="selection-rect" style={selectionStyle} />}
+          {outline ? <div className="ptz-outline" style={outline} /> : null}
+          {selectionStyle ? <div className="selection-rect" style={selectionStyle} /> : null}
         </div>
       </div>
     </section>

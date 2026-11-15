@@ -1,5 +1,4 @@
 export const demoAssets = {
-  auditorium: '/demo-assets/auditorium-wide.png',
   video: '/demo-assets/demo-video.mp4',
   slides: [
     '/demo-assets/slides/slide-01.png',

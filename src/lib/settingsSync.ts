@@ -2,7 +2,9 @@ import { dockBlocks } from '../docks/blocks';
 import { normalizeStoredDockLayout } from '../docks/layout';
 import type { DockLayoutState } from '../docks/types';
 import { lightingPresets, ptzPresets } from '../demo/presets';
+import { defaultCameraConfig } from '../../shared/cameras';
 import { parseSettingsDocument, SETTINGS_VERSION, type AppSettingsDocument } from '../../shared/settings';
+import { getCameraState, subscribeCameras } from './cameras';
 import { getSessionState, subscribeSession } from './session';
 
 const LEGACY_DOCK_LAYOUT_KEY = 'easystream.dockLayout.v1';
@@ -13,14 +15,19 @@ let saveTimer: number | null = null;
 let ready = false;
 let seenPresets = getSessionState().presets;
 let seenLightingPresets = getSessionState().lightingPresets;
+let seenConfig = getCameraState().config;
+let seenCalibration = getCameraState().calibration;
 
 export const currentSettingsDocument = (): AppSettingsDocument => {
   const current = getSessionState();
+  const cameras = getCameraState();
   return {
     version: SETTINGS_VERSION,
     presets: current.presets,
     lightingPresets: current.lightingPresets,
-    dockLayout
+    dockLayout,
+    cameras: cameras.config,
+    calibration: cameras.calibration
   };
 };
 
@@ -66,8 +73,10 @@ export const startSettingsSync = () => {
   const current = getSessionState();
   seenPresets = current.presets;
   seenLightingPresets = current.lightingPresets;
+  seenConfig = getCameraState().config;
+  seenCalibration = getCameraState().calibration;
   window.addEventListener('beforeunload', saveSettingsNow);
-  return subscribeSession(() => {
+  const stopSession = subscribeSession(() => {
     const next = getSessionState();
     if (next.presets === seenPresets && next.lightingPresets === seenLightingPresets) {
       return;
@@ -77,6 +86,20 @@ export const startSettingsSync = () => {
     seenLightingPresets = next.lightingPresets;
     scheduleSave();
   });
+  const stopCameras = subscribeCameras(() => {
+    const next = getCameraState();
+    if (next.config === seenConfig && next.calibration === seenCalibration) {
+      return;
+    }
+
+    seenConfig = next.config;
+    seenCalibration = next.calibration;
+    scheduleSave();
+  });
+  return () => {
+    stopSession();
+    stopCameras();
+  };
 };
 
 const readLegacyDockLayout = () => {
@@ -98,9 +121,11 @@ const clearLegacyDockLayout = () => {
 
 const defaultDocument = (layout: DockLayoutState | null): AppSettingsDocument => ({
   version: SETTINGS_VERSION,
-  presets: ptzPresets.map((preset) => ({ ...preset, crop: { ...preset.crop } })),
+  presets: ptzPresets.map((preset) => ({ ...preset })),
   lightingPresets: lightingPresets.map((preset) => ({ ...preset, look: { ...preset.look } })),
-  dockLayout: layout
+  dockLayout: layout,
+  cameras: defaultCameraConfig,
+  calibration: null
 });
 
 export const loadAppSettings = async () => {

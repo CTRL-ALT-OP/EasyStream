@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { startObsSync } from './lib/obs';
+import { startCameraSync } from './lib/cameras';
 import { hydrateSession } from './lib/session';
 import { loadAppSettings, startSettingsSync } from './lib/settingsSync';
 import './styles.css';
@@ -12,6 +13,7 @@ async function boot() {
     presets: settings.presets,
     lightingPresets: settings.lightingPresets
   });
+  startCameraSync({ cameras: settings.cameras, calibration: settings.calibration });
   startSettingsSync();
   startObsSync();
 

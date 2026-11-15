@@ -1,36 +1,14 @@
 import type { LightingPreset, PtzPreset } from '../types';
 
+const unset = { pan: null, tilt: null, zoom: null, thumbnail: null };
+
 export const ptzPresets: PtzPreset[] = [
-  {
-    id: 'stage-wide',
-    label: 'Stage Wide',
-    crop: { x: 22, y: 7.75, width: 56, height: 56 }
-  },
-  {
-    id: 'podium',
-    label: 'Podium',
-    crop: { x: 42, y: 25.125, width: 18, height: 18 }
-  },
-  {
-    id: 'worship',
-    label: 'Worship',
-    crop: { x: 18, y: 26.5, width: 24, height: 24 }
-  },
-  {
-    id: 'audience',
-    label: 'Audience',
-    crop: { x: 28, y: 38.375, width: 44, height: 44 }
-  },
-  {
-    id: 'center-aisle',
-    label: 'Center Aisle',
-    crop: { x: 34, y: 27, width: 32, height: 32 }
-  },
-  {
-    id: 'right-stage',
-    label: 'Right Stage',
-    crop: { x: 58, y: 29.5, width: 24, height: 24 }
-  }
+  { id: 'stage-wide', label: 'Stage Wide', ...unset },
+  { id: 'podium', label: 'Podium', ...unset },
+  { id: 'worship', label: 'Worship', ...unset },
+  { id: 'audience', label: 'Audience', ...unset },
+  { id: 'center-aisle', label: 'Center Aisle', ...unset },
+  { id: 'right-stage', label: 'Right Stage', ...unset }
 ];
 
 export const lightingPresets: LightingPreset[] = [

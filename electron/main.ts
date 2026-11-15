@@ -1,7 +1,24 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultCameraConfig } from '../shared/cameras';
 import { parseSettingsDocument, type AppSettingsDocument } from '../shared/settings';
+import {
+  cancelCalibration,
+  driveCamera,
+  getCameraSnapshot,
+  homeCamera,
+  moveCamera,
+  nudgeCamera,
+  setCameraConfig,
+  startCalibration,
+  startCameraService,
+  stepZoomCamera,
+  stopCamera,
+  stopCameraService,
+  stopZoomCamera,
+  zoomCamera
+} from './cameraService';
 import {
   getObsSnapshot,
   getObsStreamSettings,
@@ -167,6 +184,26 @@ app.whenReady().then(() => {
   ipcMain.handle('obs:set-preview-target', (_event, target: unknown) => {
     setObsPreviewTarget(target);
   });
+  ipcMain.handle('cameras:get-state', () => getCameraSnapshot());
+  ipcMain.handle('cameras:set-config', (_event, value: unknown) => setCameraConfig(value));
+  ipcMain.handle('ptz:drive', (_event, direction: unknown, panSpeed: unknown, tiltSpeed: unknown) =>
+    driveCamera(direction as 'up', Number(panSpeed), Number(tiltSpeed))
+  );
+  ipcMain.handle('ptz:stop', () => stopCamera());
+  ipcMain.handle('ptz:nudge', (_event, pan: unknown, tilt: unknown, panSpeed: unknown, tiltSpeed: unknown) =>
+    nudgeCamera(Number(pan), Number(tilt), Number(panSpeed), Number(tiltSpeed))
+  );
+  ipcMain.handle('ptz:zoom', (_event, direction: unknown, speed: unknown) => zoomCamera(direction === 'wide' ? 'wide' : 'tele', Number(speed)));
+  ipcMain.handle('ptz:zoom-stop', () => stopZoomCamera());
+  ipcMain.handle('ptz:zoom-step', (_event, delta: unknown) => stepZoomCamera(Number(delta)));
+  ipcMain.handle('ptz:move', (_event, pan: unknown, tilt: unknown, zoom: unknown, panSpeed: unknown, tiltSpeed: unknown) =>
+    moveCamera(Number(pan), Number(tilt), typeof zoom === 'number' ? zoom : null, Number(panSpeed), Number(tiltSpeed))
+  );
+  ipcMain.handle('ptz:home', () => homeCamera());
+  ipcMain.handle('calibration:start', () => startCalibration());
+  ipcMain.handle('calibration:cancel', () => cancelCalibration());
+  const settings = readSettingsDocument();
+  startCameraService(settings?.cameras ?? defaultCameraConfig);
   startObsClient();
   createWindow();
 
@@ -178,6 +215,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  stopCameraService();
   stopObsClient();
 });
 

@@ -1,18 +1,10 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Focus, Gauge, Home, Minus, Plus, SlidersHorizontal, Sun, ZoomIn } from 'lucide-react';
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PtzFrame } from './PreviewFrames';
 import { usePtzMotion } from './PtzMotion';
-import {
-  recallLightingPreset,
-  recallPreset,
-  saveLightingPreset,
-  savePreset,
-  setCameraLook,
-  setPanZoomSpeed,
-  useSession
-} from '../lib/session';
-import type { CameraLook, CropRect } from '../types';
+import { getCameraState, goHome, recallPosition, useCamera } from '../lib/cameras';
+import { recallLightingPreset, saveLightingPreset, savePreset, setCameraLook, setPanZoomSpeed, useSession } from '../lib/session';
+import type { CameraLook } from '../types';
 
 type PtzDockContextValue = {
   settingPositionPreset: boolean;
@@ -29,11 +21,6 @@ type LightingField = keyof CameraLook;
 type PresetLike = {
   id: string;
   label: string;
-};
-
-type PtzPresetThumbnailProps = {
-  crop: CropRect;
-  look: CameraLook;
 };
 
 const PtzDockContext = createContext<PtzDockContextValue | null>(null);
@@ -201,10 +188,27 @@ function usePtzDockContext() {
   return context;
 }
 
-const PtzPresetThumbnail = memo(function PtzPresetThumbnail({ crop, look }: PtzPresetThumbnailProps) {
+const PtzPresetThumbnail = memo(function PtzPresetThumbnail({ thumbnail, look }: { thumbnail: string | null; look: CameraLook }) {
+  const warmth = look.warmth;
   return (
     <div className="preset-live-preview">
-      <PtzFrame crop={crop} look={look} downsampled />
+      <div className="frame">
+        {thumbnail ? (
+          <img
+            src={thumbnail}
+            alt=""
+            draggable={false}
+            style={{ filter: `brightness(${look.brightness}%) contrast(${look.contrast}%) saturate(${look.saturation}%)` }}
+          />
+        ) : null}
+        <div
+          className="ptz-lighting-tint"
+          style={{
+            background: warmth >= 0 ? 'rgb(255, 168, 72)' : 'rgb(76, 148, 255)',
+            opacity: Math.min(Math.abs(warmth) / 100, 0.32)
+          }}
+        />
+      </div>
     </div>
   );
 });
@@ -355,8 +359,13 @@ function PagedPresetList<TPreset extends PresetLike>({
 }
 
 function ZoomReadout() {
-  const width = useSession((current) => current.crop.width);
-  return <span>{Math.round(10000 / width)}%</span>;
+  const zoom = useCamera((current) => current.pose?.zoom ?? null);
+  const config = useCamera((current) => current.config);
+  if (zoom === null) {
+    return <span>—%</span>;
+  }
+  const span = config.zoomMax - config.zoomMin || 1;
+  return <span>{Math.round(((zoom - config.zoomMin) / span) * 100)}%</span>;
 }
 
 export function PtzMainControls() {
@@ -365,6 +374,7 @@ export function PtzMainControls() {
   const presets = useSession((current) => current.presets);
   const look = useSession((current) => current.cameraLook);
   const activePresetId = useSession((current) => current.activePresetId);
+  const visca = useCamera((current) => current.status.visca);
   const positionPresetListRef = useRef<HTMLDivElement>(null);
   const presetCutout = usePresetCutout(settingPositionPreset, positionPresetListRef);
 
@@ -372,7 +382,7 @@ export function PtzMainControls() {
     <section className="ptz-column ptz-main-controls" data-devtip="ptz">
       <div className="panel-heading">
         <h2>PTZ</h2>
-        <span className="status-pill online">Online</span>
+        <span className={`status-pill ${visca === 'open' ? 'online' : ''}`}>{visca === 'open' ? 'Online' : 'Offline'}</span>
       </div>
 
       <div className="joystick" aria-label="PTZ directional controls">
@@ -382,7 +392,7 @@ export function PtzMainControls() {
         <button {...bindDirection('left')}>
           <ArrowLeft size={18} />
         </button>
-        <button className="home-button" type="button" onClick={() => recallPreset(presets[0])} aria-label="Recall stage wide">
+        <button className="home-button" type="button" onClick={() => void goHome()} aria-label="Recall stage wide">
           <Home size={18} />
         </button>
         <button {...bindDirection('right')}>
@@ -429,16 +439,17 @@ export function PtzMainControls() {
             className={`preset-button position-preset-card ${activePresetId === preset.id ? 'active' : ''}`}
             onClick={() => {
               if (settingPositionPreset) {
-                savePreset(preset.id);
+                const snapshot = getCameraState();
+                savePreset(preset.id, snapshot.pose, snapshot.ptz?.image ?? null);
                 setPositionPresetMode(false);
                 return;
               }
 
-              recallPreset(preset);
+              void recallPosition(preset);
             }}
           >
             <div className="preset-preview">
-              <PtzPresetThumbnail crop={preset.crop} look={look} />
+              <PtzPresetThumbnail thumbnail={preset.thumbnail} look={look} />
             </div>
             <span>{preset.label}</span>
           </button>
